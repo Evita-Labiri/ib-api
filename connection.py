@@ -16,6 +16,8 @@ from dash.dependencies import Input, Output
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
+import ta
+
 
 class TradingApp(EClient, EWrapper):
     def __init__(self):
@@ -70,8 +72,6 @@ class TradingApp(EClient, EWrapper):
             print(f"Error ensuring connection: {e}")
             if self.db_session:
                 self.db_session.rollback()
-
-
 
     def error(self, reqId, errorCode, errorString, advancedOrderRejectJson = ""):
         print("Error: {} {} {} {}".format(reqId, errorCode, errorString, advancedOrderRejectJson))
@@ -277,7 +277,54 @@ class TradingApp(EClient, EWrapper):
             print(f"Error fetching data from MySQL table {table_name}: {e}")
             return pd.DataFrame()
 
-    def update_plot(self, days=2):
+    def calculate_indicators(self, df):
+
+        if (len(df) < 200):
+            print("Not enough data to calculate indicators")
+            return df
+
+        # EMA 9, 20, 200
+        df['EMA9'] = ta.trend.ema_indicator(df['Close'], window=9)
+        df['EMA20'] = ta.trend.ema_indicator(df['Close'], window=20)
+        df['EMA200'] = ta.trend.ema_indicator(df['Close'], window=200)
+
+        # VWAP
+        # vwap = ta.volume.VolumeWeightedAveragePrice(
+        #     high=df['High'], low=df['Low'], close=df['Close'], volume=df['Volume'], window=14
+        # )
+        # df['VWAP'] = vwap.vwap
+        df['Session'] = (df['Date'].dt.date != df['Date'].shift(1).dt.date).cumsum()
+        df['Cumulative_Typical_Price_Volume'] = (df['Close'] * df['Volume']).groupby(df['Session']).cumsum()
+        df['Cumulative_Volume'] = df['Volume'].groupby(df['Session']).cumsum()
+        df['VWAP'] = df['Cumulative_Typical_Price_Volume'] / df['Cumulative_Volume']
+
+        # Bollinger Bands
+        # indicator_bb = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
+        # df['BB_Middle'] = indicator_bb.bollinger_mavg()
+        # df['BB_Upper'] = indicator_bb.bollinger_hband()
+        # df['BB_Lower'] = indicator_bb.bollinger_lband()
+        df['SMA20'] = df['Close'].rolling(window=20).mean()
+        df['BB_Middle'] = df['SMA20']
+        df['BB_Upper'] = df['SMA20'] + 2 * df['Close'].rolling(window=20).std()
+        df['BB_Lower'] = df['SMA20'] - 2 * df['Close'].rolling(window=20).std()
+
+        # MACD
+        # indicator_macd = ta.trend.MACD(df['Close'], window_slow=26, window_fast=12, window_sign=9)
+        # df['MACD'] = indicator_macd.macd()
+        # df['MACD_Signal'] = indicator_macd.macd_signal()
+        ema12 = df['Close'].ewm(span=12, adjust=False).mean()
+        ema26 = df['Close'].ewm(span=26, adjust=False).mean()
+        df['MACD'] = ema12 - ema26
+        df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+
+        # Remove intermediate calculation columns safely
+        columns_to_remove = ['Typical_Price', 'Cumulative_Typical_Price_Volume', 'Cumulative_Volume']
+        df = df.drop(columns=[col for col in columns_to_remove if col in df])
+
+        return df
+
+
+    def update_plot(self, days=3):
         end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -294,6 +341,8 @@ class TradingApp(EClient, EWrapper):
         combined_data['Date'] = pd.to_datetime(combined_data['Date'])
         combined_data.sort_values(by='Date', inplace=True)
 
+        combined_data = self.calculate_indicators(combined_data)
+
         print("Combined Data:")
         # print(combined_data.tail())
         pd.set_option('display.max_columns', None)
@@ -301,7 +350,13 @@ class TradingApp(EClient, EWrapper):
         pd.set_option('display.max_colwidth', None)
         # combined_data = pd.DataFrame(self.real_time_data, columns=['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
         print(combined_data)
+
+        self.export_to_excel(combined_data)
+
         return combined_data
+
+    def export_to_excel(self, df, filename="output.xlsx"):
+        df.to_excel(filename, index=False)
 
     def main_thread_function(self):
         while True:
@@ -344,7 +399,7 @@ print("Contract OK")
 #     1,  # reqId for minute data
 #     contract,  # contract details
 #     "",  # end date/time (empty string for current date/time
-#     "2 D",  # duration (2 months)
+#     "1 D",  # duration (2 months)
 #     "1 min",  # bar size (1 minute)
 #     "TRADES",  # data type
 #     0,  # whether to include only regular trading hours data (1) or to include all trading hours data (0) in the historical data request.
