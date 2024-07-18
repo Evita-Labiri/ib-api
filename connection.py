@@ -1,6 +1,7 @@
 import os
 import queue
 from datetime import datetime, timedelta
+import pytz
 
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
@@ -17,6 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 import ta
+
 
 
 class TradingApp(EClient, EWrapper):
@@ -84,12 +86,16 @@ class TradingApp(EClient, EWrapper):
         print(
             f'Time: {bar.date}, Open: {bar.open}, High: {bar.high}, Low: {bar.low}, Close: {bar.close}, Volume: {bar.volume}')
         try:
+            ny_tz = pytz.timezone('America/New_York')
+            date = None  # Αρχικοποίηση της μεταβλητής date
             if reqId == 1:  # Minute data
                 date_str, time_str, tz_str = bar.date.split()
                 date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
+                date = ny_tz.localize(date).replace(tzinfo=None)
             elif reqId == 2:  # Daily data
                 date_str = bar.date
                 date = datetime.strptime(date_str, '%Y%m%d')
+                date = ny_tz.localize(date).replace(tzinfo=None)
             self.data.append([date, bar.open, bar.high, bar.low, bar.close, bar.volume])
             if reqId == 1:
                 self.insert_data_to_minute_table('minute_data', date, bar.open, bar.high, bar.low, bar.close,
@@ -194,10 +200,12 @@ class TradingApp(EClient, EWrapper):
             self.db_session.rollback()
     def tickPrice(self, reqId, tickType, price, attrib):
         print("Tick Price called now: ")
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
         print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
         if tickType == 4:  # Last
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            # timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
             with self.lock:
                 if reqId not in self.ohlcv_data:
                     self.ohlcv_data[reqId] = {
@@ -229,7 +237,8 @@ class TradingApp(EClient, EWrapper):
 
     def tickSize(self, reqId, tickType, size):
         print("Tick Size called now: ")
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
         print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
 
         if tickType == 5:  # Volume
@@ -279,52 +288,144 @@ class TradingApp(EClient, EWrapper):
 
     def calculate_indicators(self, df):
 
-        if (len(df) < 200):
+        if len(df) < 200:
             print("Not enough data to calculate indicators")
             return df
 
         # EMA 9, 20, 200
-        df['EMA9'] = ta.trend.ema_indicator(df['Close'], window=9)
-        df['EMA20'] = ta.trend.ema_indicator(df['Close'], window=20)
-        df['EMA200'] = ta.trend.ema_indicator(df['Close'], window=200)
+        df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
+        df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+        df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
         # VWAP
-        # vwap = ta.volume.VolumeWeightedAveragePrice(
-        #     high=df['High'], low=df['Low'], close=df['Close'], volume=df['Volume'], window=14
-        # )
-        # df['VWAP'] = vwap.vwap
         df['Session'] = (df['Date'].dt.date != df['Date'].shift(1).dt.date).cumsum()
-        df['Cumulative_Typical_Price_Volume'] = (df['Close'] * df['Volume']).groupby(df['Session']).cumsum()
+        df['Typical_Price'] = (df['Close'] + df['High'] + df['Low']) / 3
+        df['Cumulative_Typical_Price_Volume'] = (df['Typical_Price'] * df['Volume']).groupby(df['Session']).cumsum()
         df['Cumulative_Volume'] = df['Volume'].groupby(df['Session']).cumsum()
         df['VWAP'] = df['Cumulative_Typical_Price_Volume'] / df['Cumulative_Volume']
 
         # Bollinger Bands
-        # indicator_bb = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
-        # df['BB_Middle'] = indicator_bb.bollinger_mavg()
-        # df['BB_Upper'] = indicator_bb.bollinger_hband()
-        # df['BB_Lower'] = indicator_bb.bollinger_lband()
         df['SMA20'] = df['Close'].rolling(window=20).mean()
         df['BB_Middle'] = df['SMA20']
         df['BB_Upper'] = df['SMA20'] + 2 * df['Close'].rolling(window=20).std()
         df['BB_Lower'] = df['SMA20'] - 2 * df['Close'].rolling(window=20).std()
 
         # MACD
-        # indicator_macd = ta.trend.MACD(df['Close'], window_slow=26, window_fast=12, window_sign=9)
-        # df['MACD'] = indicator_macd.macd()
-        # df['MACD_Signal'] = indicator_macd.macd_signal()
         ema12 = df['Close'].ewm(span=12, adjust=False).mean()
         ema26 = df['Close'].ewm(span=26, adjust=False).mean()
         df['MACD'] = ema12 - ema26
         df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
 
         # Remove intermediate calculation columns safely
-        columns_to_remove = ['Typical_Price', 'Cumulative_Typical_Price_Volume', 'Cumulative_Volume']
+        columns_to_remove = ['SMA20', 'Typical_Price', 'Cumulative_Typical_Price_Volume', 'Cumulative_Volume']
         df = df.drop(columns=[col for col in columns_to_remove if col in df])
 
         return df
+    # 2 Columns for entry and exit for each position where if one of the criteria is true then it says true
 
+    def generate_signals(self, df):
+        # Initialize the signals columns
+        df['Long_Entry'] = False
+        df['Long_Entry_Criteria'] = ""
+        df['Short_Entry'] = False
+        df['Short_Entry_Criteria'] = ""
+        df['Long_Exit'] = False
+        df['Long_Exit_Criteria'] = ""
+        df['Short_Exit'] = False
+        df['Short_Exit_Criteria'] = ""
 
-    def update_plot(self, days=3):
+        in_long_position = False
+        in_short_position = False
+
+        for i in range(1, len(df)):
+            if pd.isna(df['Close'].iloc[i]) or pd.isna(df['EMA9'].iloc[i]) or pd.isna(df['EMA20'].iloc[i]) or pd.isna(
+                    df['EMA200'].iloc[i]):
+                continue
+
+            long_entry_conditions = []
+            short_entry_conditions = []
+
+            # Check Long Entry criteria
+            if df['EMA9'].iloc[i] > df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] <= df['EMA20'].iloc[i - 1]:
+                long_entry_conditions.append("EMA9 crossed above EMA20")
+            if df['EMA9'].iloc[i] > df['EMA200'].iloc[i]:
+                long_entry_conditions.append("EMA9 above EMA200")
+            if df['EMA20'].iloc[i] > df['EMA200'].iloc[i]:
+                long_entry_conditions.append("EMA20 above EMA200")
+            if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
+                long_entry_conditions.append("Close above VWAP")
+            if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] <= df['MACD_Signal'].iloc[
+                i - 1]:
+                long_entry_conditions.append("MACD crossed above Signal")
+            if df['MACD'].iloc[i] > 0 and df['MACD'].iloc[i - 1] <= 0:
+                long_entry_conditions.append("MACD crossed above 0")
+            if df['Close'].iloc[i] < df['BB_Lower'].iloc[i] and df['Close'].iloc[i - 1] >= df['BB_Lower'].iloc[i - 1]:
+                long_entry_conditions.append("Price crossed above BB Lower")
+
+            if long_entry_conditions:
+                df.at[i, 'Long_Entry'] = True
+                df.at[i, 'Long_Entry_Criteria'] = ', '.join(long_entry_conditions)
+                in_long_position = True
+
+            # Check Short Entry criteria
+            if df['EMA9'].iloc[i] < df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] >= df['EMA20'].iloc[i - 1]:
+                short_entry_conditions.append("EMA9 crossed below EMA20")
+            if df['EMA9'].iloc[i] < df['EMA200'].iloc[i]:
+                short_entry_conditions.append("EMA9 below EMA200")
+            if df['EMA20'].iloc[i] < df['EMA200'].iloc[i]:
+                short_entry_conditions.append("EMA20 below EMA200")
+            if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
+                short_entry_conditions.append("Close below VWAP")
+            if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] >= df['MACD_Signal'].iloc[
+                i - 1]:
+                short_entry_conditions.append("MACD crossed below Signal")
+            if df['MACD'].iloc[i] < 0 and df['MACD'].iloc[i - 1] >= 0:
+                short_entry_conditions.append("MACD crossed below 0")
+            if df['Close'].iloc[i] > df['BB_Upper'].iloc[i] and df['Close'].iloc[i - 1] <= df['BB_Upper'].iloc[i - 1]:
+                short_entry_conditions.append("Price crossed below BB Upper")
+
+            if short_entry_conditions:
+                df.at[i, 'Short_Entry'] = True
+                df.at[i, 'Short_Entry_Criteria'] = ', '.join(short_entry_conditions)
+                in_short_position = True
+
+            # Check Long Exit criteria if in long position
+            if in_long_position:
+                long_exit_conditions = []
+                if df['EMA9'].iloc[i] < df['EMA20'].iloc[i]:
+                    long_exit_conditions.append("EMA9 below EMA20")
+                if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
+                    long_exit_conditions.append("Close below VWAP")
+                if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i]:
+                    long_exit_conditions.append("MACD below Signal")
+                if df['Close'].iloc[i] >= df['BB_Upper'].iloc[i]:
+                    long_exit_conditions.append("Price touches BB Upper")
+
+                if long_exit_conditions:
+                    df.at[i, 'Long_Exit'] = True
+                    df.at[i, 'Long_Exit_Criteria'] = ', '.join(long_exit_conditions)
+                    in_long_position = False
+
+            # Check Short Exit criteria if in short position
+            if in_short_position:
+                short_exit_conditions = []
+                if df['EMA9'].iloc[i] > df['EMA20'].iloc[i]:
+                    short_exit_conditions.append("EMA9 above EMA20")
+                if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
+                    short_exit_conditions.append("Close above VWAP")
+                if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i]:
+                    short_exit_conditions.append("MACD above Signal")
+                if df['Close'].iloc[i] <= df['BB_Lower'].iloc[i]:
+                    short_exit_conditions.append("Price touches BB Lower")
+
+                if short_exit_conditions:
+                    df.at[i, 'Short_Exit'] = True
+                    df.at[i, 'Short_Exit_Criteria'] = ', '.join(short_exit_conditions)
+                    in_short_position = False
+
+        return df
+
+    def update_plot(self, days=2):
         end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -340,8 +441,21 @@ class TradingApp(EClient, EWrapper):
 
         combined_data['Date'] = pd.to_datetime(combined_data['Date'])
         combined_data.sort_values(by='Date', inplace=True)
-
         combined_data = self.calculate_indicators(combined_data)
+        # combined_data = self.generate_signals(combined_data)
+
+        if combined_data is not None and not combined_data.empty:
+            combined_data = combined_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+            combined_data.reset_index(drop=True, inplace=True)  # Reset the index
+            print("Combined Data before signals:")
+            print(combined_data.tail())  # Display last few rows to check data integrity
+            combined_data = self.generate_signals(combined_data)
+            print("Combined Data after signals:")
+            print(combined_data.tail())  # Display last few rows to check signals
+            self.export_to_excel(combined_data)
+
+        else:
+            print("No data to process")
 
         print("Combined Data:")
         # print(combined_data.tail())
@@ -351,12 +465,63 @@ class TradingApp(EClient, EWrapper):
         # combined_data = pd.DataFrame(self.real_time_data, columns=['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
         print(combined_data)
 
-        self.export_to_excel(combined_data)
 
         return combined_data
 
     def export_to_excel(self, df, filename="output.xlsx"):
         df.to_excel(filename, index=False)
+
+    def convert_to_ny_time(self, df, date_col):
+        greek_tz = pytz.timezone('Europe/Athens')
+        ny_tz = pytz.timezone('America/New_York')
+
+        df[date_col] = pd.to_datetime(df[date_col])
+        df[date_col] = df[date_col].dt.tz_localize(greek_tz).dt.tz_convert(ny_tz).dt.tz_localize(None)
+
+        return df
+
+    def update_database_time_to_ny(self):
+        df = self.load_data_from_db('minute_data')
+        df = self.convert_to_ny_time(df, 'date_time')
+        self.update_data_in_db(df, 'minute_data', 'temp_minute_data')
+
+    def load_data_from_db(self, table_name):
+        print(f"Attempting to load data from table: {table_name}")
+        query = f"SELECT * FROM {table_name}"
+        print(f"SQL Query: {query}")
+
+        try:
+            df = pd.read_sql(query, self.db_engine)
+            print("Data loaded successfully")
+            return df
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            return pd.DataFrame()
+
+    def update_data_in_db(self, df, table_name, temp_table_name):
+        # Save data to a temporary table
+        df.to_sql(temp_table_name, self.db_engine, if_exists='replace', index=False)
+        print("Data saved to temporary table successfully")
+
+        # Update the original table from the temporary table
+        with self.db_engine.begin() as conn:
+            conn.execute(text(f"""
+                UPDATE {table_name} t
+                JOIN {temp_table_name} temp ON t.id = temp.id
+                SET t.date_time = temp.date_time
+            """))
+        print("Data updated successfully")
+
+    def clear_data_from_table(self, table_name):
+        try:
+            self.ensure_connection()
+            query = text(f"TRUNCATE TABLE {table_name}")
+            self.db_session.execute(query)
+            self.db_session.commit()
+            print(f"All data from {table_name} has been deleted.")
+        except SQLAlchemyError as e:
+            print(f"Error deleting data from {table_name}: {e}")
+            self.db_session.rollback()
 
     def main_thread_function(self):
         while True:
@@ -384,6 +549,13 @@ while app.nextValidOrderId is None:
 
 print("connection established")
 
+# Converts data in db to New York Time
+# app.update_database_time_to_ny()
+
+# Clear existing data in the tables
+# app.clear_data_from_table('minute_data')
+# app.clear_data_from_table('daily_data')
+
 # Historical data
 contract = Contract()
 contract.symbol = "AAPL"
@@ -393,13 +565,13 @@ contract.primaryExchange = "NASDAQ"
 contract.currency = "USD"
 print("Contract OK")
 
-#Request historical minute data
+# Request historical minute data
 # print("Requesting minute data")
 # app.reqHistoricalData(
 #     1,  # reqId for minute data
 #     contract,  # contract details
 #     "",  # end date/time (empty string for current date/time
-#     "1 D",  # duration (2 months)
+#     "2 D",  # duration (2 months)
 #     "1 min",  # bar size (1 minute)
 #     "TRADES",  # data type
 #     0,  # whether to include only regular trading hours data (1) or to include all trading hours data (0) in the historical data request.
@@ -414,7 +586,7 @@ print("Contract OK")
 #     2,  # reqId for daily data
 #     contract,  # contract details
 #     "",  # end date/time (empty string for current date/time
-#     "1 D",  # duration (1 year)
+#     "2 D",  # duration (1 year)
 #     "1 day",  # bar size (1 day)
 #     "TRADES",  # data type
 #     0,  # whether to include only regular trading hours data (1) or to include all trading hours data (0) in the historical data request.
