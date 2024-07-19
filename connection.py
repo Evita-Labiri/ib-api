@@ -321,18 +321,128 @@ class TradingApp(EClient, EWrapper):
         df = df.drop(columns=[col for col in columns_to_remove if col in df])
 
         return df
-    # 2 Columns for entry and exit for each position where if one of the criteria is true then it says true
+    # 8 Columns for entry and exit for each position where if one of the criteria is true then it says true and
+    # The true criteria are noted -WORKS
+
+    # def generate_signals(self, df):
+    #     # Initialize the signals columns
+    #     df['Long_Entry'] = False
+    #     df['Long_Entry_Criteria'] = ""
+    #     df['Short_Entry'] = False
+    #     df['Short_Entry_Criteria'] = ""
+    #     df['Long_Exit'] = False
+    #     df['Long_Exit_Criteria'] = ""
+    #     df['Short_Exit'] = False
+    #     df['Short_Exit_Criteria'] = ""
+    #
+    #     in_long_position = False
+    #     in_short_position = False
+    #
+    #     for i in range(1, len(df)):
+    #         if pd.isna(df['Close'].iloc[i]) or pd.isna(df['EMA9'].iloc[i]) or pd.isna(df['EMA20'].iloc[i]) or pd.isna(
+    #                 df['EMA200'].iloc[i]):
+    #             continue
+    #
+    #         long_entry_conditions = []
+    #         short_entry_conditions = []
+    #
+    #         # Check Long Entry criteria
+    #         if df['EMA9'].iloc[i] > df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] <= df['EMA20'].iloc[i - 1]:
+    #             long_entry_conditions.append("EMA9 crossed above EMA20")
+    #         if df['EMA9'].iloc[i] > df['EMA200'].iloc[i]:
+    #             long_entry_conditions.append("EMA9 above EMA200")
+    #         if df['EMA20'].iloc[i] > df['EMA200'].iloc[i]:
+    #             long_entry_conditions.append("EMA20 above EMA200")
+    #         if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
+    #             long_entry_conditions.append("Close above VWAP")
+    #         if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] <= df['MACD_Signal'].iloc[
+    #             i - 1]:
+    #             long_entry_conditions.append("MACD crossed above Signal")
+    #         if df['MACD'].iloc[i] > 0 and df['MACD'].iloc[i - 1] <= 0:
+    #             long_entry_conditions.append("MACD crossed above 0")
+    #         if df['Close'].iloc[i] < df['BB_Lower'].iloc[i] and df['Close'].iloc[i - 1] >= df['BB_Lower'].iloc[i - 1]:
+    #             long_entry_conditions.append("Price crossed above BB Lower")
+    #
+    #         if long_entry_conditions:
+    #             df.at[i, 'Long_Entry'] = True
+    #             df.at[i, 'Long_Entry_Criteria'] = ', '.join(long_entry_conditions)
+    #             in_long_position = True
+    #
+    #         # Check Short Entry criteria
+    #         if df['EMA9'].iloc[i] < df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] >= df['EMA20'].iloc[i - 1]:
+    #             short_entry_conditions.append("EMA9 crossed below EMA20")
+    #         if df['EMA9'].iloc[i] < df['EMA200'].iloc[i]:
+    #             short_entry_conditions.append("EMA9 below EMA200")
+    #         if df['EMA20'].iloc[i] < df['EMA200'].iloc[i]:
+    #             short_entry_conditions.append("EMA20 below EMA200")
+    #         if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
+    #             short_entry_conditions.append("Close below VWAP")
+    #         if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] >= df['MACD_Signal'].iloc[
+    #             i - 1]:
+    #             short_entry_conditions.append("MACD crossed below Signal")
+    #         if df['MACD'].iloc[i] < 0 and df['MACD'].iloc[i - 1] >= 0:
+    #             short_entry_conditions.append("MACD crossed below 0")
+    #         if df['Close'].iloc[i] > df['BB_Upper'].iloc[i] and df['Close'].iloc[i - 1] <= df['BB_Upper'].iloc[i - 1]:
+    #             short_entry_conditions.append("Price crossed below BB Upper")
+    #
+    #         if short_entry_conditions:
+    #             df.at[i, 'Short_Entry'] = True
+    #             df.at[i, 'Short_Entry_Criteria'] = ', '.join(short_entry_conditions)
+    #             in_short_position = True
+    #
+    #         # Check Long Exit criteria if in long position
+    #         if in_long_position:
+    #             long_exit_conditions = []
+    #             if df['EMA9'].iloc[i] < df['EMA20'].iloc[i]:
+    #                 long_exit_conditions.append("EMA9 below EMA20")
+    #             if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
+    #                 long_exit_conditions.append("Close below VWAP")
+    #             if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i]:
+    #                 long_exit_conditions.append("MACD below Signal")
+    #             if df['Close'].iloc[i] >= df['BB_Upper'].iloc[i]:
+    #                 long_exit_conditions.append("Price touches BB Upper")
+    #
+    #             if long_exit_conditions:
+    #                 df.at[i, 'Long_Exit'] = True
+    #                 df.at[i, 'Long_Exit_Criteria'] = ', '.join(long_exit_conditions)
+    #                 in_long_position = False
+    #
+    #         # Check Short Exit criteria if in short position
+    #         if in_short_position:
+    #             short_exit_conditions = []
+    #             if df['EMA9'].iloc[i] > df['EMA20'].iloc[i]:
+    #                 short_exit_conditions.append("EMA9 above EMA20")
+    #             if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
+    #                 short_exit_conditions.append("Close above VWAP")
+    #             if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i]:
+    #                 short_exit_conditions.append("MACD above Signal")
+    #             if df['Close'].iloc[i] <= df['BB_Lower'].iloc[i]:
+    #                 short_exit_conditions.append("Price touches BB Lower")
+    #
+    #             if short_exit_conditions:
+    #                 df.at[i, 'Short_Exit'] = True
+    #                 df.at[i, 'Short_Exit_Criteria'] = ', '.join(short_exit_conditions)
+    #                 in_short_position = False
+    #
+    #     return df
 
     def generate_signals(self, df):
         # Initialize the signals columns
+        criteria_columns = [
+            'EMA9_above_EMA20', 'EMA9_below_EMA20', 'EMA9_above_EMA200', 'EMA9_below_EMA200',
+            'EMA20_above_EMA200', 'EMA20_below_EMA200', 'Close_above_VWAP', 'Close_below_VWAP',
+            'MACD_above_Signal', 'MACD_below_Signal', 'MACD_above_zero', 'MACD_below_zero',
+            'Price_crossed_above_BB_Lower', 'Price_crossed_below_BB_Upper', 'Price_touches_BB_Upper',
+            'Price_touches_BB_Lower'
+        ]
+
+        for col in criteria_columns:
+            df[col] = ""
+
         df['Long_Entry'] = False
-        df['Long_Entry_Criteria'] = ""
         df['Short_Entry'] = False
-        df['Short_Entry_Criteria'] = ""
         df['Long_Exit'] = False
-        df['Long_Exit_Criteria'] = ""
         df['Short_Exit'] = False
-        df['Short_Exit_Criteria'] = ""
 
         in_long_position = False
         in_short_position = False
@@ -342,86 +452,85 @@ class TradingApp(EClient, EWrapper):
                     df['EMA200'].iloc[i]):
                 continue
 
-            long_entry_conditions = []
-            short_entry_conditions = []
-
-            # Check Long Entry criteria
+            # Long Entry Criteria
             if df['EMA9'].iloc[i] > df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] <= df['EMA20'].iloc[i - 1]:
-                long_entry_conditions.append("EMA9 crossed above EMA20")
+                df.at[i, 'EMA9_above_EMA20'] += "Long Entry, "
             if df['EMA9'].iloc[i] > df['EMA200'].iloc[i]:
-                long_entry_conditions.append("EMA9 above EMA200")
+                df.at[i, 'EMA9_above_EMA200'] += "Long Entry, "
             if df['EMA20'].iloc[i] > df['EMA200'].iloc[i]:
-                long_entry_conditions.append("EMA20 above EMA200")
+                df.at[i, 'EMA20_above_EMA200'] += "Long Entry, "
             if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
-                long_entry_conditions.append("Close above VWAP")
+                df.at[i, 'Close_above_VWAP'] += "Long Entry, "
             if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] <= df['MACD_Signal'].iloc[
                 i - 1]:
-                long_entry_conditions.append("MACD crossed above Signal")
+                df.at[i, 'MACD_above_Signal'] += "Long Entry, "
             if df['MACD'].iloc[i] > 0 and df['MACD'].iloc[i - 1] <= 0:
-                long_entry_conditions.append("MACD crossed above 0")
+                df.at[i, 'MACD_above_zero'] += "Long Entry, "
             if df['Close'].iloc[i] < df['BB_Lower'].iloc[i] and df['Close'].iloc[i - 1] >= df['BB_Lower'].iloc[i - 1]:
-                long_entry_conditions.append("Price crossed above BB Lower")
+                df.at[i, 'Price_crossed_above_BB_Lower'] += "Long Entry, "
 
-            if long_entry_conditions:
-                df.at[i, 'Long_Entry'] = True
-                df.at[i, 'Long_Entry_Criteria'] = ', '.join(long_entry_conditions)
-                in_long_position = True
-
-            # Check Short Entry criteria
+            # Short Entry Criteria
             if df['EMA9'].iloc[i] < df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] >= df['EMA20'].iloc[i - 1]:
-                short_entry_conditions.append("EMA9 crossed below EMA20")
+                df.at[i, 'EMA9_below_EMA20'] += "Short Entry, "
             if df['EMA9'].iloc[i] < df['EMA200'].iloc[i]:
-                short_entry_conditions.append("EMA9 below EMA200")
+                df.at[i, 'EMA9_below_EMA200'] += "Short Entry, "
             if df['EMA20'].iloc[i] < df['EMA200'].iloc[i]:
-                short_entry_conditions.append("EMA20 below EMA200")
+                df.at[i, 'EMA20_below_EMA200'] += "Short Entry, "
             if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
-                short_entry_conditions.append("Close below VWAP")
+                df.at[i, 'Close_below_VWAP'] += "Short Entry, "
             if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] >= df['MACD_Signal'].iloc[
                 i - 1]:
-                short_entry_conditions.append("MACD crossed below Signal")
+                df.at[i, 'MACD_below_Signal'] += "Short Entry, "
             if df['MACD'].iloc[i] < 0 and df['MACD'].iloc[i - 1] >= 0:
-                short_entry_conditions.append("MACD crossed below 0")
+                df.at[i, 'MACD_below_zero'] += "Short Entry, "
             if df['Close'].iloc[i] > df['BB_Upper'].iloc[i] and df['Close'].iloc[i - 1] <= df['BB_Upper'].iloc[i - 1]:
-                short_entry_conditions.append("Price crossed below BB Upper")
+                df.at[i, 'Price_crossed_below_BB_Upper'] += "Short Entry, "
 
-            if short_entry_conditions:
-                df.at[i, 'Short_Entry'] = True
-                df.at[i, 'Short_Entry_Criteria'] = ', '.join(short_entry_conditions)
-                in_short_position = True
-
-            # Check Long Exit criteria if in long position
+            # Long Exit Criteria
             if in_long_position:
-                long_exit_conditions = []
                 if df['EMA9'].iloc[i] < df['EMA20'].iloc[i]:
-                    long_exit_conditions.append("EMA9 below EMA20")
+                    df.at[i, 'EMA9_below_EMA20'] += "Long Exit, "
                 if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
-                    long_exit_conditions.append("Close below VWAP")
+                    df.at[i, 'Close_below_VWAP'] += "Long Exit, "
                 if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i]:
-                    long_exit_conditions.append("MACD below Signal")
+                    df.at[i, 'MACD_below_Signal'] += "Long Exit, "
                 if df['Close'].iloc[i] >= df['BB_Upper'].iloc[i]:
-                    long_exit_conditions.append("Price touches BB Upper")
+                    df.at[i, 'Price_touches_BB_Upper'] += "Long Exit, "
 
-                if long_exit_conditions:
-                    df.at[i, 'Long_Exit'] = True
-                    df.at[i, 'Long_Exit_Criteria'] = ', '.join(long_exit_conditions)
-                    in_long_position = False
-
-            # Check Short Exit criteria if in short position
+            # Short Exit Criteria
             if in_short_position:
-                short_exit_conditions = []
                 if df['EMA9'].iloc[i] > df['EMA20'].iloc[i]:
-                    short_exit_conditions.append("EMA9 above EMA20")
+                    df.at[i, 'EMA9_above_EMA20'] += "Short Exit, "
                 if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
-                    short_exit_conditions.append("Close above VWAP")
+                    df.at[i, 'Close_above_VWAP'] += "Short Exit, "
                 if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i]:
-                    short_exit_conditions.append("MACD above Signal")
+                    df.at[i, 'MACD_above_Signal'] += "Short Exit, "
                 if df['Close'].iloc[i] <= df['BB_Lower'].iloc[i]:
-                    short_exit_conditions.append("Price touches BB Lower")
+                    df.at[i, 'Price_touches_BB_Lower'] += "Short Exit, "
 
-                if short_exit_conditions:
-                    df.at[i, 'Short_Exit'] = True
-                    df.at[i, 'Short_Exit_Criteria'] = ', '.join(short_exit_conditions)
-                    in_short_position = False
+            # Update position flags
+            df.at[i, 'Long_Entry'] = "Long Entry" in df.iloc[i][criteria_columns].apply(lambda x: x.strip(', '))
+            df.at[i, 'Short_Entry'] = "Short Entry" in df.iloc[i][criteria_columns].apply(lambda x: x.strip(', '))
+            df.at[i, 'Long_Exit'] = "Long Exit" in df.iloc[i][criteria_columns].apply(
+                lambda x: x.strip(', ')) and in_long_position
+            df.at[i, 'Short_Exit'] = "Short Exit" in df.iloc[i][criteria_columns].apply(
+                lambda x: x.strip(', ')) and in_short_position
+
+            if df.at[i, 'Long_Entry']:
+                in_long_position = True
+            if df.at[i, 'Short_Entry']:
+                in_short_position = True
+            if df.at[i, 'Long_Exit']:
+                in_long_position = False
+            if df.at[i, 'Short_Exit']:
+                in_short_position = False
+
+        # Remove trailing commas and spaces from criteria columns
+        for col in criteria_columns:
+            df[col] = df[col].str.strip(', ')
+
+        # Drop the entry/exit columns
+        df = df.drop(columns=['Long_Entry', 'Short_Entry', 'Long_Exit', 'Short_Exit'])
 
         return df
 
@@ -444,6 +553,21 @@ class TradingApp(EClient, EWrapper):
         combined_data = self.calculate_indicators(combined_data)
         # combined_data = self.generate_signals(combined_data)
 
+        # WORKS DON'T CHANGE ANYTHING
+        # if combined_data is not None and not combined_data.empty:
+        #     combined_data = combined_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+        #     combined_data.reset_index(drop=True, inplace=True)  # Reset the index
+        #     print("Combined Data before signals:")
+        #     print(combined_data.tail())  # Display last few rows to check data integrity
+        #     combined_data = self.generate_signals(combined_data)
+        #     print("Combined Data after signals:")
+        #     print(combined_data.tail())  # Display last few rows to check signals
+        #     self.export_to_excel(combined_data)
+        #
+        # else:
+        #     print("No data to process")
+
+        # Μαλλον ειναι τ ιδιο με τ προηγουμενο
         if combined_data is not None and not combined_data.empty:
             combined_data = combined_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
             combined_data.reset_index(drop=True, inplace=True)  # Reset the index
@@ -453,7 +577,6 @@ class TradingApp(EClient, EWrapper):
             print("Combined Data after signals:")
             print(combined_data.tail())  # Display last few rows to check signals
             self.export_to_excel(combined_data)
-
         else:
             print("No data to process")
 
@@ -566,7 +689,7 @@ contract.currency = "USD"
 print("Contract OK")
 
 # Request historical minute data
-# print("Requesting minute data")
+# # print("Requesting minute data")
 # app.reqHistoricalData(
 #     1,  # reqId for minute data
 #     contract,  # contract details
@@ -579,8 +702,8 @@ print("Contract OK")
 #     False,  # whether the client keep getting real-time updates of new data points or not (keep only the historical data after the initial receive).
 #     []
 # )
-
-# Request historical daily data
+#
+# # Request historical daily data
 # print("Requesting daily data")
 # app.reqHistoricalData(
 #     2,  # reqId for daily data
