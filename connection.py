@@ -31,6 +31,9 @@ class TradingApp(EClient, EWrapper):
         self.lock = threading.Lock()
         self.historical_data_downloaded = False  # Flag to check if historical data is downloaded
         self.ohlcv_data = {}
+        # self.user_interval = '5T'  # Προκαθορισμένο διάστημα
+        self.last_update_time = None
+
 
         self.db_engine = self.create_engine()
         if self.db_engine:
@@ -233,7 +236,7 @@ class TradingApp(EClient, EWrapper):
                     float(self.ohlcv_data[reqId]['volume'])
                 ])
                 self.data_ready_queue.put(self.real_time_data[-1])
-                self.update_plot()
+                # self.update_plot()
 
     def tickSize(self, reqId, tickType, size):
         print("Tick Size called now: ")
@@ -255,7 +258,7 @@ class TradingApp(EClient, EWrapper):
                         'volume': size
                     }
 
-                self.update_plot()
+                # self.update_plot()
 
     def fetch_table_columns(self, table_name):
         query = f"SHOW COLUMNS FROM {table_name}"
@@ -427,6 +430,13 @@ class TradingApp(EClient, EWrapper):
     #     return df
 
     def generate_signals(self, df):
+
+        required_columns = ['EMA9', 'EMA20', 'EMA200', 'VWAP', 'MACD', 'MACD_Signal', 'BB_Upper', 'BB_Lower']
+        for col in required_columns:
+            if col not in df.columns:
+                print(f"Not enough data to calculate {col}")
+                return df
+
         # Initialize the signals columns
         criteria_columns = [
             'EMA9_above_EMA20', 'EMA9_below_EMA20', 'EMA9_above_EMA200', 'EMA9_below_EMA200',
@@ -534,62 +544,46 @@ class TradingApp(EClient, EWrapper):
 
         return df
 
-    def update_plot(self, days=2):
+    def resample_data(self, df, interval):
+        resampled_df = df.resample(interval, on='Date').agg({
+            'Open': 'first',
+            'High': 'max',
+            'Low': 'min',
+            'Close': 'last',
+            'Volume': 'sum'
+        }).dropna().reset_index()
+
+        return resampled_df
+
+    def update_plot(self, days=4, interval='1min'):
         end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
         df_minute = self.fetch_data_from_db('minute_data', start_date, end_date)
-        # df_daily = self.fetch_data_from_db('daily_data')
-
-        # Combine dataframes using pd.concat
         combined_data = pd.concat([
             df_minute,
-            # df_daily,
             pd.DataFrame(self.real_time_data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
         ])
 
         combined_data['Date'] = pd.to_datetime(combined_data['Date'])
         combined_data.sort_values(by='Date', inplace=True)
         combined_data = self.calculate_indicators(combined_data)
-        # combined_data = self.generate_signals(combined_data)
 
-        # WORKS DON'T CHANGE ANYTHING
-        # if combined_data is not None and not combined_data.empty:
-        #     combined_data = combined_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-        #     combined_data.reset_index(drop=True, inplace=True)  # Reset the index
-        #     print("Combined Data before signals:")
-        #     print(combined_data.tail())  # Display last few rows to check data integrity
-        #     combined_data = self.generate_signals(combined_data)
-        #     print("Combined Data after signals:")
-        #     print(combined_data.tail())  # Display last few rows to check signals
-        #     self.export_to_excel(combined_data)
+        resampled_data = self.resample_data(combined_data, interval)
+        resampled_data = self.calculate_indicators(resampled_data)
+        resampled_data = self.generate_signals(resampled_data)
+
+        # print("Combined Data:")
+        # print(combined_data)
         #
-        # else:
-        #     print("No data to process")
+        # return combined_data
 
-        # Μαλλον ειναι τ ιδιο με τ προηγουμενο
-        if combined_data is not None and not combined_data.empty:
-            combined_data = combined_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-            combined_data.reset_index(drop=True, inplace=True)  # Reset the index
-            print("Combined Data before signals:")
-            print(combined_data.tail())  # Display last few rows to check data integrity
-            combined_data = self.generate_signals(combined_data)
-            print("Combined Data after signals:")
-            print(combined_data.tail())  # Display last few rows to check signals
-            self.export_to_excel(combined_data)
-        else:
-            print("No data to process")
+        print("Combined Data resampled:")
+        print(resampled_data.tail())
 
-        print("Combined Data:")
-        # print(combined_data.tail())
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.width', None)
-        pd.set_option('display.max_colwidth', None)
-        # combined_data = pd.DataFrame(self.real_time_data, columns=['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
-        print(combined_data)
+        self.export_to_excel(resampled_data)
 
-
-        return combined_data
+        return resampled_data
 
     def export_to_excel(self, df, filename="output.xlsx"):
         df.to_excel(filename, index=False)
@@ -646,11 +640,19 @@ class TradingApp(EClient, EWrapper):
             print(f"Error deleting data from {table_name}: {e}")
             self.db_session.rollback()
 
-    def main_thread_function(self):
+    def validate_interval(self, user_input):
+        valid_intervals = ['1min', '2min', '3min', '4min', '5min', '10min', '15min', '30min', '1H']
+        if user_input in valid_intervals:
+            return user_input
+        else:
+            print(f"Invalid interval '{user_input}', defaulting to '5min'")
+            return '5min'
+
+    def main_thread_function(self, interval):
         while True:
             if not self.data_ready_queue.empty():
-                data = self.data_ready_queue.get()
-                self.update_plot()
+                _ = self.data_ready_queue.get()
+                self.update_plot(interval=interval)
 
     def close_connection(self):
         if self.db_session:
@@ -663,7 +665,17 @@ app.connect("127.0.0.1",7497, 1)
 t1 = threading.Thread(target=app.run)
 t1.start()
 
-main_thread = threading.Thread(target=app.main_thread_function)
+interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
+
+interval = app.validate_interval(interval_input)  # Χρήση της validate_interval για έλεγχο της εισόδου
+
+
+# valid_intervals = ['1T', '1min', '5T', '5min', '10T', '15T', '30T', '1H']
+# if interval not in valid_intervals:
+#     print(f"Invalid interval: {interval}. Defaulting to '5T'.")
+#     interval = '5T'
+
+main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
 main_thread.start()
 
 while app.nextValidOrderId is None:
@@ -689,7 +701,7 @@ contract.currency = "USD"
 print("Contract OK")
 
 # Request historical minute data
-# # print("Requesting minute data")
+# print("Requesting minute data")
 # app.reqHistoricalData(
 #     1,  # reqId for minute data
 #     contract,  # contract details
@@ -722,7 +734,7 @@ print("Contract OK")
 app.reqMktData(
     3,  # reqId
     contract,  # contract details
-    "",  # generic tick list
+    "",  # generic tick l ist
     False,  # snapshot
     False,  # regulatory snapshot
     []  # options
@@ -741,7 +753,7 @@ app.reqMktData(
 #         n_intervals=0
 #     )
 # ])
-
+#
 # @dash_app.callback(Output('live-update-graph', 'figure'),
 #               [Input('interval-component', 'n_intervals')])
 # def update_graph_live(n):
@@ -769,7 +781,7 @@ app.reqMktData(
 #     )
 #
 #     return fig
-
+#
 # if __name__ == '__main__':
 #     dash_app.run_server(debug=True, use_reloader=False)
 
