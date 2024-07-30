@@ -26,25 +26,29 @@ def main():
     exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
     currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
 
-    # action = input("Enter action (BUY/SELL): ").upper()
-    # quantity = int(input("Enter quantity: "))
-    # limit_price = float(input("Enter limit price: "))
-    # stop_loss = float(input("Enter stop loss: "))
+    action = input("Enter action (BUY/SELL): ").upper()
+    quantity = int(input("Enter quantity: "))
+    profit_target = float(input("Enter profit target: "))
+    limit_price = float(input("Enter limit price: "))
+    stop_loss = float(input("Enter stop loss: "))
 
     contract = app.create_contract(symbol, secType, exchange, currency)
-    # Place the bracket order after connection is established and order ID is received
-    # app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss)
 
     # Choose interval to show on the df
-    interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
-    interval = data_processor.validate_interval(interval_input)
-    data_processor.interval = interval
+    # interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
+    # interval = data_processor.validate_interval(interval_input)
+    # data_processor.interval = interval
 
     while app.nextValidOrderId is None:
         print("Waiting for TWS connection acknowledgment...")
         time.sleep(1)
 
     print("connection established")
+    print("Connection established, nextValidOrderId:", app.nextValidOrderId)
+
+    # Place the bracket order after connection is established and order ID is received
+    print("Placing bracket order...")
+    app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss)
 
     # Request historical minute data
     # print("Requesting minute data")
@@ -77,21 +81,20 @@ def main():
     # )
 
     # Request market data for real-time updates
-    app.reqMktData(
-        3,
-        contract,
-        "",
-        False,
-        False,
-        []
-    )
+    # app.reqMktData(
+    #     3,
+    #     contract,
+    #     "",
+    #     False,
+    #     False,
+    #     []
+    # )
 
     # Start a thread to process data and update the plot
-    main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
-    main_thread.start()
+    # main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
+    # main_thread.start()
 
     try:
-
         while True:
             time.sleep(1)
     except KeyboardInterrupt:

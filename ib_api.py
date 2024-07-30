@@ -130,6 +130,7 @@ class IBApi(EClient, EWrapper):
             order.lmtPrice = limitPrice
         if auxPrice is not None:
             order.auxPrice = auxPrice
+        print(f"Created order: {order}")
         return order
 
     def create_bracket_order(self, parentOrderId, action, quantity, limit_price, profit_target, stop_loss):
@@ -159,6 +160,7 @@ class IBApi(EClient, EWrapper):
                                             stop_loss)
         for o in bracket:
             self.placeOrder(o.orderId, contract, o)
+            print(f"Placed order: {o.orderId} for contract: {contract.symbol}")
 
     def create_contract(self, symbol, secType, exchange, currency):
         contract = Contract()
