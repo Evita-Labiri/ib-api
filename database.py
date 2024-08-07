@@ -51,13 +51,15 @@ class Database:
         for index, row in df.iterrows():
             self.ensure_connection()
             try:
+                print(f"Inserting row: {row}")  # Εκτύπωση της σειράς που προσπαθούμε να εισάγουμε
+                print(f"Row keys: {row.keys()}")  # Εκτύπωση των κλειδιών της σειράς
                 query = text(f"""
                               INSERT INTO {table_name} (ticker, datetime, open, high, low, close, volume)
                               VALUES (:ticker, :datetime, :open, :high, :low, :close, :volume)
                           """)
                 self.session.execute(query, {
                     'ticker': row['ticker'],
-                    'datetime': row['datetime'],
+                    'date_time': row['datetime'],
                     'open': row['open'],
                     'high': row['high'],
                     'low': row['low'],
@@ -68,6 +70,74 @@ class Database:
             except SQLAlchemyError as e:
                 print(f"Error inserting data into {table_name}: {e}")
                 self.session.rollback()
+
+    def insert_data_to_minute_table(self, table_name, ticker, date, open, high, low, close, volume):
+        # ticker = "AAPL"
+        try:
+            self.ensure_connection()
+            query = text(f"SELECT COUNT(*) FROM {table_name} WHERE ticker = :ticker AND date_time = :date_time")
+            result = self.session.execute(query, {
+                'ticker': ticker,
+                'date_time': date
+            })
+
+            row = result.fetchone()
+            if row and row[0] == 0:
+                print(f"Inserting minute data: {ticker}, {date}, {open}, {high}, {low}, {close}, {volume}")
+                insert_query = text(f"""
+                                INSERT INTO {table_name} (ticker, date_time, open, high, low, close, volume)
+                                VALUES (:ticker, :date_time, :open, :high, :low, :close, :volume)
+                            """)
+                self.session.execute(insert_query, {
+                    'ticker': ticker,
+                    'date_time': date,
+                    'open': open,
+                    'high': high,
+                    'low': low,
+                    'close': close,
+                    'volume': volume
+                })
+                self.session.commit()
+                print("Data inserted")
+            else:
+                print(f"Duplicate minute data found for {ticker} at {date}, skipping insertion.")
+        except SQLAlchemyError as e:
+            print(f"Error inserting minute data into {table_name}: {e}")
+            self.session.rollback()
+
+    def insert_data_to_daily_table(self, table_name, ticker, date, open, high, low, close, volume):
+        # ticker = "AAPL"
+        try:
+            self.ensure_connection()
+            query = text(f"SELECT COUNT(*) FROM {table_name} WHERE ticker = :ticker AND date = :date")
+            result = self.session.execute(query, {
+                'ticker': ticker,
+                'date': date
+            })
+
+            row = result.fetchone()
+            if row and row[0] == 0:
+                print(f"Inserting daily data: {ticker}, {date}, {open}, {high}, {low}, {close}, {volume}")
+                insert_query = text(f"""
+                     INSERT INTO {table_name} (ticker, date, open, high, low, close, volume)
+                     VALUES (:ticker, :date, :open, :high, :low, :close, :volume)
+                 """)
+                self.session.execute(insert_query, {
+                    'ticker': ticker,
+                    'date': date,
+                    'open': open,
+                    'high': high,
+                    'low': low,
+                    'close': close,
+                    'volume': volume
+                })
+                self.session.commit()
+                print("Data inserted")
+            else:
+                print(f"Duplicate daily data found for {ticker} at {date}, skipping insertion.")
+        except SQLAlchemyError as e:
+            print(f"Error inserting daily data into {table_name}: {e}")
+            self.session.rollback()
 
     def fetch_data_from_db(self, table_name, start_date=None, end_date=None):
         columns = self.fetch_table_columns(table_name)

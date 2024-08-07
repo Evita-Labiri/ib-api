@@ -1,11 +1,14 @@
+import pandas as pd
 import pytz
-import queue
-from datetime import datetime
+from time import sleep
+from datetime import datetime, time
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ibapi.order import Order
 import threading
+
+import data_processing
 
 
 class IBApi(EClient, EWrapper):
@@ -15,7 +18,7 @@ class IBApi(EClient, EWrapper):
         self.data = []
         self.real_time_data = []
         self.lock = threading.Lock()
-
+        self.ticker = None
         self.historical_data_downloaded = False  # Flag to check if historical data is downloaded
         self.ohlcv_data = {}
         self.data_processor = data_processor
@@ -40,22 +43,73 @@ class IBApi(EClient, EWrapper):
         print(
             f"Exec Details - reqId: {reqId}, symbol: {contract.symbol}, execId: {execution.execId}, orderId: {execution.orderId}, shares: {execution.shares}, lastLiquidity: {execution.lastLiquidity}")
 
+    # def historicalData(self, reqId, bar):
+    #     print("Requesting data...")
+    #     # date = datetime.strptime(bar.date, '%Y%m%d  %H:%M:%S')
+    #
+    #     try:
+    #         ny_tz = pytz.timezone('America/New_York')
+    #         date = None
+    #         ticker = self.ticker
+    #
+    #         # self.data.append([date, bar.open, bar.high, bar.low, bar.close, bar.volume])
+    #         print(
+    #             f'Time: {bar.date}, Open: {bar.open}, High: {bar.high}, Low: {bar.low}, Close: {bar.close}, Volume: {bar.volume}')
+    #         date = bar.date
+    #         if reqId == 1:
+    #             date_str, time_str, tz_str = bar.date.split()
+    #             date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
+    #             date = ny_tz.localize(date).replace(tzinfo=None)
+    #             self.db.insert_data_to_minute_table('minute_data', date, bar.open, bar.high, bar.low, bar.close,
+    #                                                 bar.volume)
+    #         elif reqId == 2:
+    #             date_str = bar.date
+    #             date = datetime.strptime(date_str, '%Y%m%d')
+    #             date = ny_tz.localize(date).replace(tzinfo=None)
+    #             self.db.insert_data_to_daily_table('daily_data', date, bar.open, bar.high, bar.low, bar.close,
+    #                                                bar.volume)
+    #         self.data.append([date, bar.open, bar.high, bar.low, bar.close, bar.volume, ticker])
+    #     except ValueError as e:
+    #         print(f"Error converting date: {e}")
+    #
+    # def historicalDataEnd(self, reqId, start, end):
+    #     self.data_processor.data_ready_queue.put(self.data)
+    #
+    #     df = pd.DataFrame(self.data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+    #     # df['Ticker'] = self.ticker
+    #
+    #     print(f"DataFrame columns: {df.columns}")
+    #     print(df.head())
+    #
+    #     if reqId == 2:
+    #         self.db.insert_data_to_db(df, 'daily_data')
+    #     else:
+    #         self.db.insert_data_to_db(df, 'minute_data')
+    #
+    #     self.data = []
+
     def historicalData(self, reqId, bar):
         print("Requesting data...")
         print(
             f'Time: {bar.date}, Open: {bar.open}, High: {bar.high}, Low: {bar.low}, Close: {bar.close}, Volume: {bar.volume}')
         try:
             ny_tz = pytz.timezone('America/New_York')
-            date = None
-            if reqId == 1:
+            date = None  # Αρχικοποίηση της μεταβλητής date
+            if reqId == 1:  # Minute data
                 date_str, time_str, tz_str = bar.date.split()
                 date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
                 date = ny_tz.localize(date).replace(tzinfo=None)
-            elif reqId == 2:
+            elif reqId == 2:  # Daily data
                 date_str = bar.date
                 date = datetime.strptime(date_str, '%Y%m%d')
                 date = ny_tz.localize(date).replace(tzinfo=None)
             self.data.append([date, bar.open, bar.high, bar.low, bar.close, bar.volume])
+            if reqId == 1:
+                self.db.insert_data_to_minute_table('minute_data', self.ticker, date, bar.open, bar.high, bar.low, bar.close,
+                                                 bar.volume)
+            elif reqId == 2:
+                self.db.insert_data_to_daily_table('daily_data', self.ticker, date, bar.open, bar.high, bar.low,
+                                                   bar.close, bar.volume)
         except ValueError as e:
             print(f"Error converting date: {e}")
 
@@ -64,9 +118,9 @@ class IBApi(EClient, EWrapper):
         self.data_processor.data_ready_queue.put(self.data)
 
     def tickPrice(self, reqId, tickType, price, attrib):
-        print("Tick Price called now: ")
+        # print("Tick Price called now: ")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
-        print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
+        # print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
         if tickType == 4:  # Last
             timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
             with self.lock:
@@ -95,12 +149,13 @@ class IBApi(EClient, EWrapper):
                     float(self.ohlcv_data[reqId]['volume'])
                 ])
                 self.data_processor.data_ready_queue.put(self.real_time_data[-1])
-                print(f"Appended real-time data: {self.real_time_data[-1]}")  # Debug print
+                # print(f"Appended real-time data: {self.real_time_data[-1]}")  # Debug print
                 self.data_processor.update_plot(interval=self.data_processor.interval)
+
     def tickSize(self, reqId, tickType, size):
-        print("Tick Size called now: ")
+        # print("Tick Size called now: ")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
-        print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
+        # print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
 
         if tickType == 5:  # Volume
             with (self.lock):
@@ -119,13 +174,14 @@ class IBApi(EClient, EWrapper):
             print(f"Updated OHLCV data for {reqId}: {self.ohlcv_data[reqId]}")  # Debug print
             self.data_processor.update_plot(interval=self.data_processor.interval)
 
-    def create_order(self, orderId, action, orderType, quantity, limitPrice=None, auxPrice=None):
+    def create_order(self, orderId, action, orderType, quantity, limitPrice=None, auxPrice=None, outsideRth=False):
         order = Order()
         order.orderId = orderId
         order.action = action
         order.orderType = orderType
         order.totalQuantity = quantity
         order.transmit = False
+        order.outsideRth = outsideRth
         if limitPrice is not None:
             order.lmtPrice = limitPrice
         if auxPrice is not None:
@@ -133,7 +189,8 @@ class IBApi(EClient, EWrapper):
         print(f"Created order: {order}")
         return order
 
-    def create_bracket_order(self, parentOrderId, action, quantity, limit_price, profit_target, stop_loss):
+    def create_bracket_order(self, parentOrderId, action, quantity, limit_price, profit_target, stop_loss,
+                             outsideRth=False):
         if action == "BUY":
             take_profit_action = "SELL"
             stop_loss_action = "SELL"
@@ -141,26 +198,37 @@ class IBApi(EClient, EWrapper):
             take_profit_action = "BUY"
             stop_loss_action = "BUY"
 
-        parent = self.create_order(parentOrderId, action, "LMT", quantity, limitPrice=limit_price)
+        parent = self.create_order(parentOrderId, action, "LMT", quantity, limitPrice=limit_price,
+                                   outsideRth=outsideRth)
         parent.transmit = False
 
         take_profit = self.create_order(parentOrderId + 1, take_profit_action, "LMT", quantity,
-                                        limitPrice=profit_target)
+                                        limitPrice=profit_target, outsideRth=outsideRth)
         take_profit.parentId = parentOrderId
         take_profit.transmit = False
 
-        stop_loss = self.create_order(parentOrderId + 2, stop_loss_action, "STP", quantity, auxPrice=stop_loss)
+        stop_loss = self.create_order(parentOrderId + 2, stop_loss_action, "STP", quantity, auxPrice=stop_loss,
+                                      outsideRth=outsideRth)
         stop_loss.parentId = parentOrderId
         stop_loss.transmit = True
 
         return [parent, take_profit, stop_loss]
 
-    def place_bracket_order(self, contract, action, quantity, limit_price, profit_target, stop_loss):
+    def place_bracket_order(self, contract, action, quantity, limit_price, profit_target, stop_loss, outside_rth=False):
+        if not outside_rth and not self.data_processor.is_market_open():
+            print("Market is closed. Order will not be placed.")
+            return
+
         bracket = self.create_bracket_order(self.nextValidOrderId, action, quantity, limit_price, profit_target,
-                                            stop_loss)
+                                            stop_loss, outside_rth)
         for o in bracket:
             self.placeOrder(o.orderId, contract, o)
             print(f"Placed order: {o.orderId} for contract: {contract.symbol}")
+            self.nextValidOrderId += 1
+
+    def cancel_open_order(self, orderId):
+        print(f"Cancelling order ID: {orderId}")
+        self.cancelOrder(orderId)
 
     def create_contract(self, symbol, secType, exchange, currency):
         contract = Contract()
@@ -176,6 +244,43 @@ class IBApi(EClient, EWrapper):
                 _ = self.data_processor.data_ready_queue.get()
                 self.data_processor.update_plot(interval=interval)
 
+    def order_main_thread_function(self, data_processor, interval, contract, order_manager):
+        while True:
+            sleep(1)
+            print("Running order main thread function")
+            combined_data = data_processor.update_plot(interval=interval)
+            print("Combined data updated")
+            order_manager.process_signals_and_place_orders(combined_data, contract)
+            print("Processed signals and placed orders")
+
     def close_connection(self):
         self.disconnect() #Closes conn with IB API
         self.db.db_close_connection()
+
+    def user_command_thread(app):
+        while True:
+            command = input("Enter a command (type 'cancel' to cancel an order, 'quit' to exit): ").lower()
+            if command == 'cancel':
+                try:
+                    order_to_cancel = int(input("Enter the order ID to cancel: "))
+                    app.cancel_order(order_to_cancel)
+                except ValueError:
+                    print("Invalid order ID. Please enter a numeric value.")
+            elif command == 'quit':
+                print("Exiting command thread.")
+                break
+            elif command.startswith('interval'):
+                try:
+                    _, interval_value = command.split()
+                    interval = app.data_processor.validate_interval(interval_value)
+                    app.data_processor.set_interval(interval)
+                    print(f"Interval set to {interval}")
+                except ValueError:
+                    print("Invalid interval command. Usage: interval <value>")
+            else:
+                print(f"Unknown command: {command}")
+
+    def cancel_order(self, order_id):
+        manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
+        print(f"Order {order_id} has been cancelled")

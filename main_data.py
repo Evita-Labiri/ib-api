@@ -1,12 +1,10 @@
 import threading
 import time
-
 from ib_api import IBApi
 from data_processing import DataProcessor
 from database import Database
 
-
-def run_data_script():
+def main():
     db = Database()
     app = IBApi(data_processor=None, db=db)
     data_processor = DataProcessor(db, app)
@@ -16,18 +14,22 @@ def run_data_script():
     t1 = threading.Thread(target=app.run)
     t1.start()
 
+    # Default contract for testing
     default_symbol = "AAPL"
     default_secType = "STK"
     default_exchange = "SMART"
     default_currency = "USD"
 
+    # Contract
     symbol = input(f"Enter the symbol (e.g., '{default_symbol}'): ").upper() or default_symbol
     secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
     exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
     currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
 
     contract = app.create_contract(symbol, secType, exchange, currency)
+    app.ticker = symbol
 
+    # Choose interval to show on the df
     interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
     interval = data_processor.validate_interval(interval_input)
     data_processor.interval = interval
@@ -68,20 +70,17 @@ def run_data_script():
     #     []
     # )
 
-    print("Requesting daily data")
-    app.reqHistoricalData(
-        2,
+    # Request market data for real-time updates
+    app.reqMktData(
+        3,
         contract,
         "",
-        "2 D",
-        "1 day",
-        "TRADES",
-        0,
-        1,
+        False,
         False,
         []
     )
 
+    # Start a thread to process data and update the plot
     main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
     main_thread.start()
 
@@ -92,81 +91,6 @@ def run_data_script():
         print("Interrupted by user, closing connection...")
     finally:
         app.close_connection()
-
-
-def run_order_script():
-    db = Database()
-    app = IBApi(data_processor=None, db=db)
-    data_processor = DataProcessor(db, app)
-    app.data_processor = data_processor
-    order_manager = data_processor.order_manager
-    app.connect("127.0.0.1", 7497, 1)
-
-    t1 = threading.Thread(target=app.run)
-    t1.start()
-
-    default_symbol = "AAPL"
-    default_secType = "STK"
-    default_exchange = "SMART"
-    default_currency = "USD"
-
-    outside_rth_input = input("Allow orders outside regular trading hours? (yes/no, default: no): ").lower() or "no"
-    outside_rth = outside_rth_input == "yes"
-
-    symbol = input(f"Enter the symbol (e.g., '{default_symbol}'): ").upper() or default_symbol
-    secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
-    exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
-    currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
-
-    while app.nextValidOrderId is None:
-        print("Waiting for TWS connection acknowledgment...")
-        time.sleep(1)
-
-    print("Connection established, nextValidOrderId:", app.nextValidOrderId)
-
-    contract = app.create_contract(symbol, secType, exchange, currency)
-
-    interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
-    interval = data_processor.validate_interval(interval_input)
-    data_processor.interval = interval
-
-    app.reqMktData(
-        3,
-        contract,
-        "",
-        False,
-        False,
-        []
-    )
-
-    print("Following main thread: ")
-    main_thread = threading.Thread(target=app.order_main_thread_function, args=(data_processor, interval, contract, order_manager))
-    main_thread.start()
-
-    command_thread = threading.Thread(target=app.user_command_thread)
-    command_thread.start()
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Interrupted by user, closing connection...")
-    finally:
-        app.close_connection()
-
-
-def main():
-    print("Select the script to run:")
-    print("1. Data Script")
-    print("2. Order Script")
-    choice = input("Enter 1 or 2: ")
-
-    if choice == '1':
-        run_data_script()
-    elif choice == '2':
-        run_order_script()
-    else:
-        print("Invalid choice. Exiting.")
 
 
 if __name__ == "__main__":
