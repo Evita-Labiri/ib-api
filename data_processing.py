@@ -1,9 +1,8 @@
 import queue
 from datetime import datetime, timedelta, time
 import pandas as pd
-
+from globals import decision_queue, stop_flag
 from order_manager import OrderManager
-
 
 class DataProcessor:
     def __init__(self, db, app):
@@ -196,7 +195,6 @@ class DataProcessor:
                     print(f"Skipping index {i} due to NaN values")
                     continue
 
-                # Ensure the index is valid
                 if i >= len(df):
                     print(f"Skipping index {i} because it is out of range")
                     continue
@@ -205,20 +203,27 @@ class DataProcessor:
                 long_entry_conditions = []
                 if df['EMA9'].iloc[i] > df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] <= df['EMA20'].iloc[i - 1]:
                     long_entry_conditions.append("EMA9 crossed above EMA20")
+                    df.at[i, 'EMA9_above_EMA20'] += "Long Entry, "
                 if df['EMA9'].iloc[i] > df['EMA200'].iloc[i]:
                     long_entry_conditions.append("EMA9 above EMA200")
+                    df.at[i, 'EMA9_above_EMA200'] += "Long Entry, "
                 if df['EMA20'].iloc[i] > df['EMA200'].iloc[i]:
                     long_entry_conditions.append("EMA20 above EMA200")
+                    df.at[i, 'EMA20_above_EMA200'] += "Long Entry, "
                 if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
                     long_entry_conditions.append("Close above VWAP")
+                    df.at[i, 'Close_above_VWAP'] += "Long Entry, "
                 if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] <= df['MACD_Signal'].iloc[
                     i - 1]:
                     long_entry_conditions.append("MACD crossed above Signal")
+                    df.at[i, 'MACD_above_Signal'] += "Long Entry, "
                 if df['MACD'].iloc[i] > 0 and df['MACD'].iloc[i - 1] <= 0:
                     long_entry_conditions.append("MACD crossed above 0")
+                    df.at[i, 'MACD_above_zero'] += "Long Entry, "
                 if df['Close'].iloc[i] < df['BB_Lower'].iloc[i] and df['Close'].iloc[i - 1] >= df['BB_Lower'].iloc[
                     i - 1]:
                     long_entry_conditions.append("Price crossed above BB Lower")
+                    df.at[i, 'Price_crossed_above_BB_Lower'] += "Long Entry, "
 
                 if long_entry_conditions:
                     df.at[i, 'Long_Entry'] = True
@@ -228,20 +233,27 @@ class DataProcessor:
                 short_entry_conditions = []
                 if df['EMA9'].iloc[i] < df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] >= df['EMA20'].iloc[i - 1]:
                     short_entry_conditions.append("EMA9 crossed below EMA20")
+                    df.at[i, 'EMA9_below_EMA20'] += "Short Entry, "
                 if df['EMA9'].iloc[i] < df['EMA200'].iloc[i]:
                     short_entry_conditions.append("EMA9 below EMA200")
+                    df.at[i, 'EMA9_below_EMA200'] += "Short Entry, "
                 if df['EMA20'].iloc[i] < df['EMA200'].iloc[i]:
                     short_entry_conditions.append("EMA20 below EMA200")
+                    df.at[i, 'EMA20_below_EMA200'] += "Short Entry, "
                 if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
                     short_entry_conditions.append("Close below VWAP")
+                    df.at[i, 'Close_below_VWAP'] += "Short Entry, "
                 if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] >= df['MACD_Signal'].iloc[
                     i - 1]:
                     short_entry_conditions.append("MACD crossed below Signal")
+                    df.at[i, 'MACD_below_Signal'] += "Short Entry, "
                 if df['MACD'].iloc[i] < 0 and df['MACD'].iloc[i - 1] >= 0:
                     short_entry_conditions.append("MACD crossed below 0")
+                    df.at[i, 'MACD_below_zero'] += "Short Entry, "
                 if df['Close'].iloc[i] > df['BB_Upper'].iloc[i] and df['Close'].iloc[i - 1] <= df['BB_Upper'].iloc[
                     i - 1]:
                     short_entry_conditions.append("Price crossed below BB Upper")
+                    df.at[i, 'Price_crossed_below_BB_Upper'] += "Short Entry, "
 
                 if short_entry_conditions:
                     df.at[i, 'Short_Entry'] = True
@@ -252,12 +264,16 @@ class DataProcessor:
                 if in_long_position:
                     if df['EMA9'].iloc[i] < df['EMA20'].iloc[i]:
                         long_exit_conditions.append("EMA9 below EMA20")
+                        df.at[i, 'EMA9_below_EMA20'] += "Long Exit, "
                     if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
                         long_exit_conditions.append("Close below VWAP")
+                        df.at[i, 'Close_below_VWAP'] += "Long Exit, "
                     if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i]:
                         long_exit_conditions.append("MACD below Signal")
+                        df.at[i, 'MACD_below_Signal'] += "Long Exit, "
                     if df['Close'].iloc[i] >= df['BB_Upper'].iloc[i]:
                         long_exit_conditions.append("Price touches BB Upper")
+                        df.at[i, 'Price_touches_BB_Upper'] += "Long Exit, "
 
                     if long_exit_conditions:
                         df.at[i, 'Long_Exit'] = True
@@ -268,12 +284,16 @@ class DataProcessor:
                 if in_short_position:
                     if df['EMA9'].iloc[i] > df['EMA20'].iloc[i]:
                         short_exit_conditions.append("EMA9 above EMA20")
+                        df.at[i, 'EMA9_above_EMA20'] += "Short Exit, "
                     if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
                         short_exit_conditions.append("Close above VWAP")
+                        df.at[i, 'Close_above_VWAP'] += "Short Exit, "
                     if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i]:
                         short_exit_conditions.append("MACD above Signal")
+                        df.at[i, 'MACD_above_Signal'] += "Short Exit, "
                     if df['Close'].iloc[i] <= df['BB_Lower'].iloc[i]:
                         short_exit_conditions.append("Price touches BB Lower")
+                        df.at[i, 'Price_touches_BB_Lower'] += "Short Exit, "
 
                     if short_exit_conditions:
                         df.at[i, 'Short_Exit'] = True
@@ -315,7 +335,7 @@ class DataProcessor:
 
         return resampled_df
 
-    def update_plot(self, days=1, interval=None):
+    def update_plot(self, days=2, interval=None):
         self.process_queue_data()
 
         # Εκτύπωση της λίστας real_time_data πριν τη δημιουργία της DataFrame
@@ -338,7 +358,7 @@ class DataProcessor:
             df_minute,
             real_time_df
         ])
-        # print("Real-time Data:")
+        # print("Real-time Data combined:")
         # print(real_time_df.tail())
 
         combined_data['Date'] = pd.to_datetime(combined_data['Date'])
@@ -358,8 +378,8 @@ class DataProcessor:
         # print("Combined Data:")
         # print(combined_data.tail())
         #
-        # print("Resampled Data:")
-        # print(resampled_data.tail())
+        print("Resampled Data:")
+        print(resampled_data.tail())
 
         self.export_to_excel(resampled_data)
         return resampled_data

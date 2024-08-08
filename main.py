@@ -1,9 +1,11 @@
 import threading
 import time
 
+from globals import decision_queue, stop_flag
 from ib_api import IBApi
 from data_processing import DataProcessor
 from database import Database
+from order_manager import OrderManager
 
 
 def run_data_script():
@@ -16,17 +18,18 @@ def run_data_script():
     t1 = threading.Thread(target=app.run)
     t1.start()
 
-    default_symbol = "AAPL"
+    default_ticker = "AAPL"
     default_secType = "STK"
     default_exchange = "SMART"
     default_currency = "USD"
 
-    symbol = input(f"Enter the symbol (e.g., '{default_symbol}'): ").upper() or default_symbol
+    ticker = input(f"Enter the ticker (e.g., '{default_ticker}'): ").upper() or default_ticker
     secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
     exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
     currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
 
-    contract = app.create_contract(symbol, secType, exchange, currency)
+    contract = app.create_contract(ticker, secType, exchange, currency)
+    app.set_ticker(ticker)
 
     interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
     interval = data_processor.validate_interval(interval_input)
@@ -68,16 +71,11 @@ def run_data_script():
     #     []
     # )
 
-    print("Requesting daily data")
-    app.reqHistoricalData(
-        2,
+    app.reqMktData(
+        3,
         contract,
         "",
-        "2 D",
-        "1 day",
-        "TRADES",
-        0,
-        1,
+        False,
         False,
         []
     )
@@ -99,7 +97,8 @@ def run_order_script():
     app = IBApi(data_processor=None, db=db)
     data_processor = DataProcessor(db, app)
     app.data_processor = data_processor
-    order_manager = data_processor.order_manager
+    order_manager = OrderManager(app)
+    data_processor.order_manager = order_manager
     app.connect("127.0.0.1", 7497, 1)
 
     t1 = threading.Thread(target=app.run)
@@ -110,8 +109,19 @@ def run_order_script():
     default_exchange = "SMART"
     default_currency = "USD"
 
-    outside_rth_input = input("Allow orders outside regular trading hours? (yes/no, default: no): ").lower() or "no"
-    outside_rth = outside_rth_input == "yes"
+    while True:
+        outside_rth_input = input("Allow orders outside regular trading hours? (yes/no, default: no): ").lower() or "no"
+        outside_rth = outside_rth_input == "yes"
+
+        if not outside_rth and not order_manager.is_market_open():
+            print("The market is closed. Please allow orders outside regular trading hours or try again during market hours.")
+            retry_choice = input(
+                "Do you want to try again or exit? (type 'retry' to try again, 'exit' to return to main menu): ").lower()
+            if retry_choice == 'exit':
+                return
+            continue
+        else:
+            break
 
     symbol = input(f"Enter the symbol (e.g., '{default_symbol}'): ").upper() or default_symbol
     secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
@@ -140,33 +150,49 @@ def run_order_script():
     )
 
     print("Following main thread: ")
-    main_thread = threading.Thread(target=app.order_main_thread_function, args=(data_processor, interval, contract, order_manager))
+    main_thread = threading.Thread(target=app.order_main_thread_function,
+                                   args=(data_processor, interval, contract, order_manager, decision_queue, stop_flag))
     main_thread.start()
 
-    command_thread = threading.Thread(target=app.user_command_thread)
-    command_thread.start()
+    decision_thread = threading.Thread(target=order_manager.handle_decision,
+                                       args=(app, decision_queue, stop_flag))
+    decision_thread.start()
+
+    esc_listener_thread = threading.Thread(target=order_manager.listen_for_esc, args=(decision_queue, stop_flag))
+    esc_listener_thread.start()
 
     try:
         while True:
-            time.sleep(1)
+            if stop_flag.is_set():
+                time.sleep(1)
     except KeyboardInterrupt:
         print("Interrupted by user, closing connection...")
     finally:
         app.close_connection()
-
+        stop_flag.set()
+        decision_thread.join()
+        esc_listener_thread.join()
+        main_thread.join()
 
 def main():
-    print("Select the script to run:")
-    print("1. Data Script")
-    print("2. Order Script")
-    choice = input("Enter 1 or 2: ")
+    while True:
+        print("Select the script to run:")
+        print("1. Data Script")
+        print("2. Order Script")
+        print("3. Exit")
+        choice = input("Enter 1, 2 or 3: ")
 
-    if choice == '1':
-        run_data_script()
-    elif choice == '2':
-        run_order_script()
-    else:
-        print("Invalid choice. Exiting.")
+        if choice == '1':
+            run_data_script()
+            break
+        elif choice == '2':
+            run_order_script()
+        elif choice == '3':
+            print("Exiting.")
+            run_order_script()
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
 
 if __name__ == "__main__":
