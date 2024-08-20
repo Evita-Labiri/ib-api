@@ -11,7 +11,7 @@ from order_manager import OrderManager
 def run_data_script():
     db = Database()
     app = IBApi(data_processor=None, db=db)
-    data_processor = DataProcessor(db, app)
+    data_processor = DataProcessor(db)
     app.data_processor = data_processor
     app.connect("127.0.0.1", 7497, 1)
 
@@ -42,23 +42,24 @@ def run_data_script():
     print("Connection established, nextValidOrderId:", app.nextValidOrderId)
 
     # Request historical minute data
-    # print("Requesting minute data")
-    # app.reqHistoricalData(
-    #     1,  # reqId for minute data
-    #     contract,  # contract details
-    #     "",  # end date/time (empty string for current date/time
-    #     "2 D",  # duration (2 months)
-    #     "1 min",  # bar size (1 minute)
-    #     "TRADES",  # data type
-    #     0,  # whether to include only regular trading hours data (1) or to include all trading hours data (0) in the historical data request.
-    #     1,  # 1 formats the date and time as human-readable strings (YYYYMMDD HH:MM:SS). 2 formats the date and time as Unix timestamps.
-    #     False,  # whether the client keep getting real-time updates of new data points or not (keep only the historical data after the initial receive).
-    #     []
-    # )
+    print("Requesting minute data")
+    app.reqHistoricalData(
+        1,  # reqId for minute data
+        contract,  # contract details
+        "",  # end date/time (empty string for current date/time
+        "2 D",  # duration (2 months)
+        "1 min",  # bar size (1 minute)
+        "TRADES",  # data type
+        0,  # whether to include only regular trading hours data (1) or to include all trading hours data (0) in the historical data request.
+        1,  # 1 formats the date and time as human-readable strings (YYYYMMDD HH:MM:SS). 2 formats the date and time as Unix timestamps.
+        False,  # whether the client keep getting real-time updates of new data points or not (keep only the historical data after the initial receive).
+        []
+    )
 
     # Request historical daily data
     # print("Requesting daily data")
-    # app.reqHistoricalData(
+    # app.reqHistoricalData(1
+
     #     2,  # reqId for daily data
     #     contract,  # contract details
     #     "",  # end date/time (empty string for current date/time
@@ -70,15 +71,15 @@ def run_data_script():
     #     False,  # whether the client keep getting real-time updates of new data points or not (keep only the historical data after the initial receive).
     #     []
     # )
-
-    app.reqMktData(
-        3,
-        contract,
-        "",
-        False,
-        False,
-        []
-    )
+    #
+    # app.reqMktData(
+    #     3,
+    #     contract,
+    #     "",
+    #     False,
+    #     False,
+    #     []
+    # )
 
     main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
     main_thread.start()
@@ -95,9 +96,9 @@ def run_data_script():
 def run_order_script():
     db = Database()
     app = IBApi(data_processor=None, db=db)
-    data_processor = DataProcessor(db, app)
+    data_processor = DataProcessor(db)
     app.data_processor = data_processor
-    order_manager = OrderManager(app)
+    order_manager = OrderManager()
     data_processor.order_manager = order_manager
     app.connect("127.0.0.1", 7497, 1)
 
@@ -136,6 +137,17 @@ def run_order_script():
 
     contract = app.create_contract(symbol, secType, exchange, currency)
 
+    print("Press ESC any time...")
+    esc_listener_thread = threading.Thread(target=order_manager.listen_for_esc, args=(decision_queue, stop_flag))
+    esc_listener_thread.start()
+
+    # action = input("Enter action (BUY/SELL): ").upper()
+    # quantity = int(input("Enter quantity: "))
+    # limit_price = float(input("Enter limit price: "))
+    # profit_target = float(input("Enter profit target: "))
+    # stop_loss = float(input("Enter stop loss: "))
+    # app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss)
+
     interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
     interval = data_processor.validate_interval(interval_input)
     data_processor.interval = interval
@@ -158,9 +170,6 @@ def run_order_script():
                                        args=(app, decision_queue, stop_flag))
     decision_thread.start()
 
-    esc_listener_thread = threading.Thread(target=order_manager.listen_for_esc, args=(decision_queue, stop_flag))
-    esc_listener_thread.start()
-
     try:
         while True:
             if stop_flag.is_set():
@@ -170,9 +179,12 @@ def run_order_script():
     finally:
         app.close_connection()
         stop_flag.set()
-        decision_thread.join()
+        # decision_thread.join()
         esc_listener_thread.join()
-        main_thread.join()
+        # main_thread.join()
+
+#         gia close me kleisti agora prepei na nai limit order kai fill outside reg hours
+#           outside rg hours == yes tha prepei na ginetai check kai sto tws fill outside trading hours
 
 def main():
     while True:

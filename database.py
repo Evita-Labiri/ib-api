@@ -51,8 +51,8 @@ class Database:
         for index, row in df.iterrows():
             self.ensure_connection()
             try:
-                print(f"Inserting row: {row}")  # Εκτύπωση της σειράς που προσπαθούμε να εισάγουμε
-                print(f"Row keys: {row.keys()}")  # Εκτύπωση των κλειδιών της σειράς
+                # print(f"Inserting row: {row}")
+                # print(f"Row keys: {row.keys()}")
                 query = text(f"""
                               INSERT INTO {table_name} (ticker, datetime, open, high, low, close, volume)
                               VALUES (:ticker, :datetime, :open, :high, :low, :close, :volume)
@@ -83,7 +83,7 @@ class Database:
 
             row = result.fetchone()
             if row and row[0] == 0:
-                print(f"Inserting minute data: {ticker}, {date}, {open}, {high}, {low}, {close}, {volume}")
+                # print(f"Inserting minute data: {ticker}, {date}, {open}, {high}, {low}, {close}, {volume}")
                 insert_query = text(f"""
                                 INSERT INTO {table_name} (ticker, date_time, open, high, low, close, volume)
                                 VALUES (:ticker, :date_time, :open, :high, :low, :close, :volume)
@@ -158,7 +158,7 @@ class Database:
         query = f"SHOW COLUMNS FROM {table_name}"
         try:
             columns = pd.read_sql(query, self.engine)
-            print(f"Columns in {table_name}: {columns['Field'].tolist()}")
+            # print(f"Columns in {table_name}: {columns['Field'].tolist()}")
             return columns['Field'].tolist()
         except Exception as e:
             print(f"Error fetching columns from table {table_name}: {e}")
@@ -177,7 +177,7 @@ class Database:
 
     def update_data_in_db(self, df, table_name, temp_table_name):
         df.to_sql(temp_table_name, self.engine, if_exists='replace', index=False)
-        print("Data saved to temporary table successfully")
+        # print("Data saved to temporary table successfully")
 
         with self.engine.begin() as conn:
             conn.execute(text(f"""
@@ -188,9 +188,9 @@ class Database:
         print("Data updated successfully")
 
     def load_data_from_db(self, table_name):
-        print(f"Attempting to load data from table: {table_name}")
+        # print(f"Attempting to load data from table: {table_name}")
         query = f"SELECT * FROM {table_name}"
-        print(f"SQL Query: {query}")
+        # print(f"SQL Query: {query}")
 
         try:
             df = pd.read_sql(query, self.engine)

@@ -1,19 +1,39 @@
 from datetime import datetime, time
 from time import sleep
 import pytz
-from globals import decision_queue, stop_flag
 import keyboard
 
+
 class OrderManager:
-    def __init__(self, app):
-        self.app = app
+    def __init__(self):
+        # self.app = app
         self.in_long_position = False
         self.in_short_position = False
         self.place_orders_outside_rth = False
+        self.alert_active = False
+        self.positions = []
 
     def set_order_outside_rth(self):
-        outside_rth_input = input(f"Do you want to place orders outside regular trading hours? (yes/no): ").strip().lower()
-        self.place_orders_outside_rth = outside_rth_input == 'yes'
+        while True:
+            # Ρωτάμε τον χρήστη αν θέλει να επιτρέψει την εκτέλεση εντολών εκτός RTH
+            outside_rth_input = input(
+                "Do you want to place orders outside regular trading hours? (yes/no): ").strip().lower()
+            if outside_rth_input == 'yes':
+                self.place_orders_outside_rth = True
+                break
+            elif outside_rth_input == 'no':
+                print("Orders outside regular trading hours are not allowed.")
+                # Δίνουμε επιλογές στον χρήστη για να προσπαθήσει ξανά ή να επιστρέψει στο κεντρικό μενού
+                choice = input("Would you like to retry or return to the main menu? (retry/menu): ").strip().lower()
+                if choice == 'retry':
+                    continue  # Επιστρέφει στην αρχή της while loop για να προσπαθήσει ξανά
+                elif choice == 'menu':
+                    print("Returning to the main menu.")
+                    return  # Επιστρέφει στο κεντρικό μενού (πρέπει να χειριστείς το επιστροφή στο μενού εκτός της συνάρτησης)
+                else:
+                    print("Invalid choice. Please try again.")
+            else:
+                print("Invalid input. Please enter 'yes' or 'no'.")
 
     def is_market_open(self):
         now = datetime.now(pytz.timezone('America/New_York'))
@@ -31,22 +51,22 @@ class OrderManager:
         return quantity, limit_price, profit_target, stop_loss
 
     def check_and_place_order(self, contract, action, quantity, limit_price, profit_target, stop_loss):
+        import data_processing
+        import database
+        import ib_api
+        db = database.Database
+        data_processor = data_processing.DataProcessor
+        app = ib_api.IBApi(data_processor, db)
+
         if self.place_orders_outside_rth or self.is_market_open():
-            self.app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss,
-                                         outsideRth=self.place_orders_outside_rth)
+            app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss,
+                                         outside_rth=self.place_orders_outside_rth)
             print(f"Placed {action} order for {quantity} shares at {limit_price}")
         else:
             print("Market is closed and order placing outside RTH is not allowed.")
 
     def send_alert(self, message):
         print(f"ALERT: {message}")
-
-    # def get_user_choice(self, message):
-    #     while True:
-    #         choice = input(message).lower()
-    #         if choice in ['yes', 'no']:
-    #             return choice
-    #         print("Invalid input. Please enter 'yes' or 'no'.")
 
     # def wait_for_user_decision(self, message):
     #     while True:
@@ -56,153 +76,63 @@ class OrderManager:
     #         print("Invalid input. Please enter 'yes' or 'no'.")
     #         sleep(1)
 
-    # def process_signals_and_place_orders(self, df, contract):
-    #     for i in range(len(df)):
-    #         try:
-    #             if df.at[i, 'Long_Entry'] and not self.in_long_position:
-    #                 self.send_alert("Long Entry detected!")
-    #                 user_choice = self.get_user_choice("Long Entry detected. Do you want to place an order? (yes/no): ")
-    #
-    #                 if user_choice == 'yes':
-    #                     limit_price = df.at[i, 'Close']
-    #                     profit_target = limit_price * 1.02  # Προκαθορισμένο 2% κέρδος
-    #                     stop_loss = limit_price * 0.98  # Προκαθορισμένη 2% απώλεια
-    #
-    #                     user_limit_price = input(f"Enter limit price (default: {limit_price}): ")
-    #                     user_profit_target = input(f"Enter profit target price (default: {profit_target}): ")
-    #                     user_stop_loss = input(f"Enter stop loss price (default: {stop_loss}): ")
-    #
-    #                     limit_price = float(user_limit_price) if user_limit_price else limit_price
-    #                     profit_target = float(user_profit_target) if user_profit_target else profit_target
-    #                     stop_loss = float(user_stop_loss) if user_stop_loss else stop_loss
-    #
-    #                     self.check_and_place_order(contract, "BUY", 100, limit_price, profit_target, stop_loss)
-    #                     self.in_long_position = True
-    #                     self.in_short_position = False
-    #                     print(f"Placed BUY bracket order at index {i}")
-    #                 else:
-    #                     print("User chose not to place a Long Entry order.")
-    #
-    #             elif df.at[i, 'Short_Entry'] and not self.in_short_position:
-    #                 self.send_alert("Short Entry detected!")
-    #                 user_choice = self.get_user_choice(
-    #                     "Short Entry detected. Do you want to place an order? (yes/no): ")
-    #
-    #                 if user_choice == 'yes':
-    #                     limit_price = df.at[i, 'Close']
-    #                     profit_target = limit_price * 0.98  # Προκαθορισμένο 2% κέρδος
-    #                     stop_loss = limit_price * 1.02  # Προκαθορισμένη 2% απώλεια
-    #
-    #                     user_limit_price = input(f"Enter limit price (default: {limit_price}): ")
-    #                     user_profit_target = input(f"Enter profit target price (default: {profit_target}): ")
-    #                     user_stop_loss = input(f"Enter stop loss price (default: {stop_loss}): ")
-    #
-    #                     limit_price = float(user_limit_price) if user_limit_price else limit_price
-    #                     profit_target = float(user_profit_target) if user_profit_target else profit_target
-    #                     stop_loss = float(user_stop_loss) if user_stop_loss else stop_loss
-    #
-    #                     self.check_and_place_order(contract, "SELL", 100, limit_price, profit_target, stop_loss)
-    #                     self.in_short_position = True
-    #                     self.in_long_position = False
-    #                     print(f"Placed SELL bracket order at index {i}")
-    #                 else:
-    #                     print("User chose not to place a Short Entry order.")
-    #
-    #             elif df.at[i, 'Long_Exit'] and self.in_long_position:
-    #                 self.send_alert("Long Exit detected!")
-    #                 user_choice = self.get_user_choice(
-    #                     "Long Exit detected. Do you want to cancel the order? (yes/no): ")
-    #
-    #                 if user_choice == 'yes':
-    #                     self.app.cancel_open_order(self.app.nextValidOrderId - 1)
-    #                     self.in_long_position = False
-    #                     print(f"Cancelled BUY order (closing long position) at index {i}")
-    #                 else:
-    #                     print("User chose not to cancel the Long Exit order.")
-    #
-    #             elif df.at[i, 'Short_Exit'] and self.in_short_position:
-    #                 self.send_alert("Short Exit detected!")
-    #                 user_choice = self.get_user_choice(
-    #                     "Short Exit detected. Do you want to cancel the order? (yes/no): ")
-    #
-    #                 if user_choice == 'yes':
-    #                     self.app.cancel_open_order(self.app.nextValidOrderId - 1)
-    #                     self.in_short_position = False
-    #                     print(f"Cancelled SELL order (closing short position) at index {i}")
-    #                 else:
-    #                     print("User chose not to cancel the Short Exit order.")
-    #
-    #         except KeyError as e:
-    #             print(f"KeyError at index {i}: {e}, skipping this index.")
-    #             continue
-    #         except Exception as e:
-    #             print(f"Unexpected error at index {i}: {e}, skipping this index.")
-    #             continue
 
-    # def handle_user_decision(self, order_manager, df, index, contract, direction):
-    #     try:
-    #         limit_price = df.at[index, 'Close']
-    #         profit_target = limit_price * (1.02 if direction == "BUY" else 0.98)
-    #         stop_loss = limit_price * (0.98 if direction == "BUY" else 1.02)
-    #
-    #         user_limit_price = input(
-    #             f"{direction} Entry detected at index {index}. Enter limit price (default: {limit_price}): ")
-    #         user_profit_target = input(f"Enter profit target price (default: {profit_target}): ")
-    #         user_stop_loss = input(f"Enter stop loss price (default: {stop_loss}): ")
-    #
-    #         limit_price = float(user_limit_price) if user_limit_price else limit_price
-    #         profit_target = float(user_profit_target) if user_profit_target else profit_target
-    #         stop_loss = float(user_stop_loss) if user_stop_loss else stop_loss
-    #
-    #         order_manager.check_and_place_order(contract, direction, 100, limit_price, profit_target, stop_loss)
-    #         return True
-    #     except Exception as e:
-    #         print(f"An error occurred while handling user decision: {e}")
-    #         return False
+    def add_position(self, position_type, order_id, status="Open"):
+        position = {
+            'type': position_type,
+            'order_id': order_id,
+            'status': status
+        }
+        self.positions.append(position)
 
-    # def process_signals_and_place_orders(self, df, contract):
-    #     for i in range(len(df)):
-    #         try:
-    #             if df.at[i, 'Long_Entry'] and not self.in_long_position:
-    #                 stop_flag.set()
-    #                 decision_queue.put(('long', i))
-    #                 stop_flag.wait()  # Wait for user decision
-    #                 stop_flag.clear()
-    #
-    #             elif df.at[i, 'Short_Entry'] and not self.in_short_position:
-    #                 stop_flag.set()
-    #                 decision_queue.put(('short', i))
-    #                 stop_flag.wait()  # Wait for user decision
-    #                 stop_flag.clear()
-    #
-    #             elif df.at[i, 'Long_Exit'] and self.in_long_position:
-    #                 decision_queue.put(('exit_long', i))
-    #
-    #             elif df.at[i, 'Short_Exit'] and self.in_short_position:
-    #                 decision_queue.put(('exit_short', i))
-    #
-    #         except KeyError as e:
-    #             print(f"KeyError at index {i}: {e}, skipping this index.")
-    #             continue
-    #         except Exception as e:
-    #             print(f"Unexpected error at index {i}: {e}, skipping this index.")
-    #             continue
+    def update_position_status(self, order_id, new_status):
+        for position in self.positions:
+            if position['order_id'] == order_id:
+                position['status'] = new_status
+                break
+
+    def display_positions(self):
+        if not self.positions:
+            print("No positions available.")
+            return
+
+        print("\n--- Positions List ---")
+        for position in self.positions:
+            print(
+                f"Position Type: {position['type']}, Order ID: {position['order_id']}, Status: {position['status']}")
+        print("----------------------\n")
+
     def process_signals_and_place_orders(self, df, contract, decision_queue, stop_flag):
         signals = []
 
+        if self.alert_active:
+            return
+
         for i in range(len(df)):
             try:
-                if df.at[i, 'Long_Entry'] and not self.in_long_position:
-                    signals.append(('long', i, contract))
+                if df.at[i, 'Long_Entry'] and not self.in_long_position and not self.in_short_position:
+                    self.send_alert("Long Entry Position Open")
+                    signals.append(('long', i, contract, df.at[i, 'Close']))
+                    self.alert_active = True
+                    break
 
-                elif df.at[i, 'Short_Entry'] and not self.in_short_position:
-                    signals.append(('short', i, contract))
+                elif df.at[i, 'Short_Entry'] and not self.in_long_position and not self.in_short_position:
+                    self.send_alert("Short Entry Position Open")
+                    signals.append(('short', i, contract, df.at[i, 'Close']))
+                    self.alert_active = True
+                    break
 
-                elif df.at[i, 'Long_Exit'] and self.in_long_position:
-                    signals.append(('exit_long', i, contract))
-
-                elif df.at[i, 'Short_Exit'] and self.in_short_position:
-                    signals.append(('exit_short', i, contract))
+                # elif df.at[i, 'Long_Exit'] and self.in_long_position:
+                #     self.send_alert("Long Exit Position Open")
+                #     signals.append(('exit_long', i, contract, df.at[i, 'Close']))
+                #     self.alert_active = True
+                #     break
+                #
+                # elif df.at[i, 'Short_Exit'] and self.in_short_position:
+                #     self.send_alert("Short Exit Position Open")
+                #     signals.append(('exit_short', i, contract, df.at[i, 'Close']))
+                #     self.alert_active = True
+                #     break
 
             except KeyError as e:
                 print(f"KeyError at index {i}: {e}, skipping this index.")
@@ -214,8 +144,10 @@ class OrderManager:
         for signal in signals:
             stop_flag.set()
             decision_queue.put(signal)
-            stop_flag.wait()  # Wait for user decision
+            stop_flag.wait()
             stop_flag.clear()
+            self.alert_active = False  # Reset alert flag after processing
+            self.place_orders_outside_rth = False
 
     def handle_decision(self, app, decision_queue, stop_flag):
         while True:
@@ -223,51 +155,102 @@ class OrderManager:
             if signal == 'exit':
                 break
 
-            action, index, contract = signal
+            action, index, contract, close_price = signal
+
+            # print(
+            #     f"[DEBUG] Handling decision - action: {action}, in_long_position: {self.in_long_position}, in_short_position: {self.in_short_position}, alert_active: {self.alert_active}")
+
+            while app.nextValidOrderId is None:
+                print("Waiting for next valid order ID...")
+                sleep(1)
+
+            outside_rth = self.place_orders_outside_rth
+
             if action == 'long':
-                limit_price = float(input(f"Long Entry detected at index {index}. Enter limit price: "))
-                profit_target = limit_price * 1.02
-                stop_loss = limit_price * 0.98
-                app.place_bracket_order(contract, "BUY", 100, limit_price, profit_target, stop_loss)
+                app.place_bracket_order(contract, "BUY", 100, close_price, close_price + 100, close_price - 50,
+                                        outside_rth=outside_rth)
                 self.in_long_position = True
                 self.in_short_position = False
+                self.add_position('Long', app.nextValidOrderId, 'Open')
+                self.display_positions()
+
+                # print(
+                #     f"[DEBUG] Long position opened - in_long_position: {self.in_long_position}, in_short_position: {self.in_short_position}")
+
             elif action == 'short':
-                limit_price = float(input(f"Short Entry detected at index {index}. Enter limit price: "))
-                profit_target = limit_price * 0.98
-                stop_loss = limit_price * 1.02
-                app.place_bracket_order(contract, "SELL", 100, limit_price, profit_target, stop_loss)
+                app.place_bracket_order(contract, "SELL", 100, close_price, close_price - 100, close_price + 50,
+                                        outside_rth=outside_rth)
+
                 self.in_short_position = True
                 self.in_long_position = False
-            elif action == 'exit_long':
-                app.cancel_open_order(app.nextValidOrderId - 1)
-                self.in_long_position = False
-            elif action == 'exit_short':
-                app.cancel_open_order(app.nextValidOrderId - 1)
-                self.in_short_position = False
+                # print(
+                #     f"[DEBUG] Short position opened - in_short_position: {self.in_short_position}, in_long_position: {self.in_long_position}")
+                self.add_position('Short', app.nextValidOrderId, 'Open')
+                self.display_positions()
 
-            stop_flag.set()  # Allow main thread to continue
-            print("2. Continue current program")
-            print("3. Return to main menu")
-            choice = input("Enter 1, 2, or 3: ")
+            # elif action == 'exit_long':
+            #     print(f"Long Exit detected at index {index}. Closing open BUY position...")
+            #     close_order = app.create_order(app.nextValidOrderId, "SELL", "MKT", 100, outsideRth=outside_rth)
+            #     app.placeOrder(app.nextValidOrderId, contract, close_order)
+            #     self.in_long_position = False
+            #     self.alert_active = False
+            #     # print(
+            #     #     f"[DEBUG] Long position closed - in_long_position: {self.in_long_position}, alert_active: {self.alert_active}")
+            #     if app.nextValidOrderId is not None:
+            #         self.update_position_status(app.nextValidOrderId - 3, 'Closed')
+            #     else:
+            #         print("[ERROR] nextValidOrderId is None. Cannot update position status.")
+            #     self.display_positions()
+            #
+            #     if app.profit_taker_order_id:
+            #         app.cancel_open_order(app.profit_taker_order_id)
+            #     if app.stop_loss_order_id:
+            #         app.cancel_open_order(app.stop_loss_order_id)
 
-            if choice == '1':
-                decision_queue.put(('cancel', None, None))
-            elif choice == '2':
-                decision_queue.put(('continue', None, None))
-            elif choice == '3':
-                decision_queue.put(('menu', None, None))
-                stop_flag.set()
-            else:
-                print("Invalid choice. Please try again.")
+            # elif action == 'exit_short':
+            #     print(f"Short Exit detected at index {index}. Closing open SELL position...")
+            #     close_order = app.create_order(app.nextValidOrderId, "BUY", "MKT", 100, outsideRth=outside_rth)
+            #     app.placeOrder(app.nextValidOrderId, contract, close_order)
+            #     self.in_short_position = False
+            #     self.alert_active = False
+            #     # print(
+            #     #     f"[DEBUG] Short position closed - in_short_position: {self.in_short_position}, alert_active: {self.alert_active}")
+            #     if app.nextValidOrderId is not None:
+            #         self.update_position_status(app.nextValidOrderId - 3, 'Closed')
+            #     else:
+            #         print("[ERROR] nextValidOrderId is None. Cannot update position status.")
+            #     self.display_positions()
+            #
+            #     if app.profit_taker_order_id:
+            #         app.cancel_open_order(app.profit_taker_order_id)
+            #     if app.stop_loss_order_id:
+            #         app.cancel_open_order(app.stop_loss_order_id)
+
+            stop_flag.set()
+            # print("2. Continue current program")
+            # print("3. Return to main menu")
+            # choice = input("Enter 1, 2, or 3: ")
+
+            # if choice == '1':
+            #     decision_queue.put(('cancel', None, None))
+            # elif choice == '2':
+            #     decision_queue.put(('continue', None, None))
+            # elif choice == '3':
+            #     decision_queue.put(('menu', None, None))
+            #     stop_flag.set()
+            # else:
+            #     print("Invalid choice. Please try again.")
             sleep(1)
 
     # def display_orders(self):
-    #     orders = list(self.app.order_queue.queue)
+    #     orders = list(self.order_queue.queue)
     #     for order in orders:
     #         print(f"Order ID: {order.orderId}, Action: {order.action}, Quantity: {order.totalQuantity}")
+    # ena antistoixo pou tha vlepw mono ta positions
 
     def listen_for_esc(self, decision_queue, stop_flag):
         while True:
+            # na prosthesw to close order
             keyboard.wait('esc')
             print("\nESC pressed. Select an option:")
             print("1. Cancel an order")
@@ -276,7 +259,22 @@ class OrderManager:
             choice = input("Enter 1, 2, or 3: ")
 
             if choice == '1':
-                decision_queue.put('cancel',  None, None)
+                # self.display_orders()  # Εμφάνιση των τρεχουσών εντολών
+                order_id = input("Enter the Order ID to cancel: ")
+                try:
+                    from ib_api import IBApi
+                    from data_processing import DataProcessor
+                    from database import Database
+
+                    db = Database()
+                    data_processor = DataProcessor(db)
+                    app = IBApi(data_processor, db)
+
+                    order_id = int(order_id)
+                    app.cancel_open_order(order_id)
+                    # print(f"Order {order_id} has been cancelled.")
+                except ValueError:
+                    print("Invalid Order ID. Please enter a numeric value.")
             elif choice == '2':
                 decision_queue.put('continue', None, None)
             elif choice == '3':

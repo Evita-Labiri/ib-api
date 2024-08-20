@@ -1,20 +1,20 @@
 import queue
 from datetime import datetime, timedelta, time
 import pandas as pd
-from globals import decision_queue, stop_flag
 from order_manager import OrderManager
 
+
 class DataProcessor:
-    def __init__(self, db, app):
+    def __init__(self, db):
         self.db = db
-        self.app = app
+        # self.app = app
         self.real_time_data = []
         self.interval = None
         self.data_ready_queue = queue.Queue()
         self.in_long_position = False
         self.in_short_position = False
         self.place_orders_outside_rth = False
-        self.order_manager = OrderManager(self.app)
+        self.order_manager = OrderManager()
 
     def process_queue_data(self):
         while not self.data_ready_queue.empty():
@@ -307,7 +307,6 @@ class DataProcessor:
                 print(f"Unexpected error at index {i}: {e}, skipping this index.")
                 continue
 
-        # Remove trailing commas and spaces from criteria columns
         for col in criteria_columns:
             df[col] = df[col].str.strip(', ')
 
@@ -378,8 +377,8 @@ class DataProcessor:
         # print("Combined Data:")
         # print(combined_data.tail())
         #
-        print("Resampled Data:")
-        print(resampled_data.tail())
+        # print("Resampled Data:")
+        # print(resampled_data.tail())
 
         self.export_to_excel(resampled_data)
         return resampled_data

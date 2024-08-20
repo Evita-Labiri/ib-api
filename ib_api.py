@@ -1,4 +1,3 @@
-import pandas as pd
 import pytz
 from time import sleep
 from datetime import datetime, time
@@ -7,10 +6,7 @@ from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ibapi.order import Order
 import threading
-
-import data_processing
-from globals import decision_queue, stop_flag
-
+from order_manager import OrderManager
 
 class IBApi(EClient, EWrapper):
     def __init__(self, data_processor, db):
@@ -24,6 +20,11 @@ class IBApi(EClient, EWrapper):
         self.ohlcv_data = {}
         self.data_processor = data_processor
         self.db = db
+        self.order_manager = OrderManager()
+        self.profit_taker_order_id = None
+        self.stop_loss_order_id = None
+        self.entry_order_id = None
+        self.nextValidOrderId = None
 
     def set_ticker(self, ticker):
         self.ticker = ticker
@@ -32,7 +33,9 @@ class IBApi(EClient, EWrapper):
         print("Error: {} {} {} {}".format(reqId, errorCode, errorString, advancedOrderRejectJson))
 
     def nextValidId(self, orderId):
+        super().nextValidId(orderId)
         self.nextValidOrderId = orderId
+        print(f"Next Valid Order ID: {orderId}")
 
     def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId,
                     whyHeld, mktCapPrice):
@@ -175,20 +178,48 @@ class IBApi(EClient, EWrapper):
         return [parent, take_profit, stop_loss]
 
     def place_bracket_order(self, contract, action, quantity, limit_price, profit_target, stop_loss, outside_rth=False):
-        if not outside_rth and not self.data_processor.is_market_open():
-            print("Market is closed. Order will not be placed.")
-            return
-
         bracket = self.create_bracket_order(self.nextValidOrderId, action, quantity, limit_price, profit_target,
-                                            stop_loss, outside_rth)
+                                                stop_loss, outside_rth)
+
+        # Store the order IDs
+        self.entry_order_id = bracket[0].orderId
+        self.profit_taker_order_id = bracket[1].orderId
+        self.stop_loss_order_id = bracket[2].orderId
+
         for o in bracket:
             self.placeOrder(o.orderId, contract, o)
             print(f"Placed order: {o.orderId} for contract: {contract.symbol}")
             self.nextValidOrderId += 1
 
-    def cancel_open_order(self, orderId):
-        print(f"Cancelling order ID: {orderId}")
-        self.cancelOrder(orderId)
+    def cancel_open_order(self, order_id):
+        print(f"Cancelling order ID: {order_id}")
+        manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
+        OrderManager.in_long_position = False
+        OrderManager.in_short_position = False
+        OrderManager.alert_active = False
+
+    # def cancel_open_order(self, order_id):
+    #     if order_id is None:
+    #         print(f"Cannot cancel order: Invalid order ID")
+    #         return
+    #
+    #     print(f"Cancelling order ID: {order_id}")
+
+        try:
+            manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+            self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
+            print(f"Order {order_id} cancelled successfully.")
+
+            # update flags here if this order is tied to an open position
+            if order_id == self.entry_order_id:
+                OrderManager.in_long_position = False
+                OrderManager.in_short_position = False
+                OrderManager.alert_active = False
+                print(f"Flags updated after cancelling order {order_id}")
+
+        except Exception as e:
+            print(f"Failed to cancel order {order_id}: {e}")
 
     def create_contract(self, symbol, secType, exchange, currency):
         contract = Contract()
@@ -214,31 +245,3 @@ class IBApi(EClient, EWrapper):
     def close_connection(self):
         self.disconnect() #Closes conn with IB API
         self.db.db_close_connection()
-
-    # def user_command_thread(app):
-    #     while True:
-    #         command = input("Enter a command (type 'cancel' to cancel an order, 'quit' to exit): ").lower()
-    #         if command == 'cancel':
-    #             try:
-    #                 order_to_cancel = int(input("Enter the order ID to cancel: "))
-    #                 app.cancel_order(order_to_cancel)
-    #             except ValueError:
-    #                 print("Invalid order ID. Please enter a numeric value.")
-    #         elif command == 'quit':
-    #             print("Exiting command thread.")
-    #             break
-    #         elif command.startswith('interval'):
-    #             try:
-    #                 _, interval_value = command.split()
-    #                 interval = app.data_processor.validate_interval(interval_value)
-    #                 app.data_processor.set_interval(interval)
-    #                 print(f"Interval set to {interval}")
-    #             except ValueError:
-    #                 print("Invalid interval command. Usage: interval <value>")
-    #         else:
-    #             print(f"Unknown command: {command}")
-
-    def cancel_order(self, order_id):
-        manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
-        self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
-        print(f"Order {order_id} has been cancelled")
