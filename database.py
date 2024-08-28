@@ -1,4 +1,6 @@
 import os
+from datetime import datetime
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
@@ -75,6 +77,19 @@ class Database:
         # ticker = "AAPL"
         try:
             self.ensure_connection()
+
+            # Check if the ticker exists in the 'companies' table
+            ticker_check_query = text("SELECT COUNT(*) FROM companies WHERE ticker = :ticker")
+            ticker_result = self.session.execute(ticker_check_query, {'ticker': ticker})
+            ticker_exists = ticker_result.fetchone()[0]
+
+            if ticker_exists == 0:
+                # If the ticker doesn't exist, insert it into the 'companies' table
+                insert_ticker_query = text("INSERT INTO companies (ticker) VALUES (:ticker)")
+                self.session.execute(insert_ticker_query, {'ticker': ticker})
+                self.session.commit()
+                print(f"Ticker {ticker} inserted into companies table.")
+
             query = text(f"SELECT COUNT(*) FROM {table_name} WHERE ticker = :ticker AND date_time = :date_time")
             result = self.session.execute(query, {
                 'ticker': ticker,
@@ -139,13 +154,19 @@ class Database:
             print(f"Error inserting daily data into {table_name}: {e}")
             self.session.rollback()
 
-    def fetch_data_from_db(self, table_name, start_date=None, end_date=None):
+    def fetch_data_from_db(self, table_name, start_date=None, end_date=None, ticker=None):
         columns = self.fetch_table_columns(table_name)
         date_col = 'date_time' if 'date_time' in columns else 'Date'
-        query = f"SELECT {date_col} as Date, open as Open, high as High, low as Low, close as Close, volume as Volume FROM {table_name}"
+        query = f"SELECT {date_col} as Date, open as Open, high as High, low as Low, close as Close, volume as Volume, ticker as Ticker FROM {table_name}"
 
+        filters = []
+        if ticker:
+            filters.append(f"ticker = '{ticker}'")
         if start_date and end_date:
-            query += f" WHERE {date_col} BETWEEN '{start_date}' AND '{end_date}'"
+            filters.append(f"{date_col} BETWEEN '{start_date}' AND '{end_date}'")
+
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
 
         try:
             df = pd.read_sql(query, self.engine)
@@ -199,6 +220,30 @@ class Database:
         except Exception as e:
             print(f"Error loading data: {e}")
             return pd.DataFrame()
+
+    def get_last_date_for_symbol(self, ticker):
+        try:
+            with self.engine.connect() as connection:
+                result = connection.execute(
+                    text("""
+                        SELECT * FROM minute_data 
+                        WHERE ticker = :ticker 
+                        ORDER BY date_time DESC 
+                        LIMIT 1
+                    """),
+                    {"ticker": ticker}
+                ).scalar()
+
+            if isinstance(result, int):
+                result = datetime.fromtimestamp(result)
+            elif isinstance(result, str):
+                result = datetime.strptime(result, '%Y-%m-%d %H:%M:%S')
+
+            return result
+
+        except Exception as e:
+            print(f"Error fetching last record for {ticker}: {e}")
+            return None
 
     def db_close_connection(self):
         self.session.close()

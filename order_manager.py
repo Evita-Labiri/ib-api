@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime, time
 from time import sleep
 import pytz
@@ -10,8 +11,9 @@ class OrderManager:
         self.in_long_position = False
         self.in_short_position = False
         self.place_orders_outside_rth = False
-        self.alert_active = False
-        self.positions = []
+        self.alert_active = {}
+        self.positions = {}
+        self.active_positions = []
 
     def set_order_outside_rth(self):
         while True:
@@ -37,11 +39,17 @@ class OrderManager:
 
     def is_market_open(self):
         now = datetime.now(pytz.timezone('America/New_York'))
+        print(f"Current time in NY: {now}")
         market_open = time(9, 30)
         market_close = time(16, 0)
         if now.weekday() >= 5:  # If it's Saturday(5) or Sunday(6)
             return False
-        return market_open <= now.time() <= market_close
+        if market_open <= now.time() <= market_close:
+            print("Market is currently open.")
+            return True
+        else:
+            print("Market is closed at this time.")
+            return False
 
     def get_order_details_from_user(self, action):
         quantity = int(input(f"Enter quantity for {action} order: "))
@@ -55,7 +63,7 @@ class OrderManager:
         import database
         import ib_api
         db = database.Database
-        data_processor = data_processing.DataProcessor
+        data_processor = data_processing.DataProcessor(db)
         app = ib_api.IBApi(data_processor, db)
 
         if self.place_orders_outside_rth or self.is_market_open():
@@ -76,14 +84,26 @@ class OrderManager:
     #         print("Invalid input. Please enter 'yes' or 'no'.")
     #         sleep(1)
 
+    def initialize_contract(self, contract_symbol):
+        if contract_symbol not in self.positions:
+            self.positions[contract_symbol] = {
+                'in_long_position': False,
+                'in_short_position': False,
+                'order_id': None,
+                'status': 'Closed'
+            }
+            self.alert_active[contract_symbol] = False
+            print(f"Initialized contract {contract_symbol} with default position values.")
+        else:
+            print(f"Contract {contract_symbol} already initialized.")
 
-    def add_position(self, position_type, order_id, status="Open"):
-        position = {
-            'type': position_type,
-            'order_id': order_id,
-            'status': status
-        }
-        self.positions.append(position)
+    # def add_position(self, position_type, order_id, status="Open"):
+    #     position = {
+    #         'type': position_type,
+    #         'order_id': order_id,
+    #         'status': status
+    #     }
+    #     self.positions.append(position)
 
     def update_position_status(self, order_id, new_status):
         for position in self.positions:
@@ -91,162 +111,365 @@ class OrderManager:
                 position['status'] = new_status
                 break
 
-    def display_positions(self):
-        if not self.positions:
-            print("No positions available.")
-            return
+    def get_position_to_close(self, position_type):
+        # Αναζητά την τελευταία ανοιχτή θέση για τον συγκεκριμένο τύπο (Long/Short)
+        for position in reversed(self.positions):  # Ξεκινάμε από το τέλος της λίστας
+            if position['type'] == position_type and position['status'] == 'Open':
+                return position
+        return None
 
-        print("\n--- Positions List ---")
-        for position in self.positions:
-            print(
-                f"Position Type: {position['type']}, Order ID: {position['order_id']}, Status: {position['status']}")
-        print("----------------------\n")
+    # def process_signals_and_place_orders(self, df, contract, decision_queue, stop_flag):
+    #     signals = []
+    #
+    #     if self.alert_active:
+    #         return
+    #
+    #     for i in range(len(df)):
+    #         try:
+    #             if df.at[i, 'Long_Entry'] and not self.in_long_position and not self.in_short_position:
+    #                 self.send_alert("Long Entry Position Open")
+    #                 signals.append(('long', i, contract, df.at[i, 'Close']))
+    #                 self.alert_active = True
+    #                 break
+    #
+    #             elif df.at[i, 'Short_Entry'] and not self.in_long_position and not self.in_short_position:
+    #                 self.send_alert("Short Entry Position Open")
+    #                 signals.append(('short', i, contract, df.at[i, 'Close']))
+    #                 self.alert_active = True
+    #                 break
+    #
+    #             # elif df.at[i, 'Long_Exit'] and self.in_long_position:
+    #             #     self.send_alert("Long Exit Position Open")
+    #             #     signals.append(('exit_long', i, contract, df.at[i, 'Close']))
+    #             #     self.alert_active = True
+    #             #     break
+    #             #
+    #             # elif df.at[i, 'Short_Exit'] and self.in_short_position:
+    #             #     self.send_alert("Short Exit Position Open")
+    #             #     signals.append(('exit_short', i, contract, df.at[i, 'Close']))
+    #             #     self.alert_active = True
+    #             #     break
+    #
+    #         except KeyError as e:
+    #             print(f"KeyError at index {i}: {e}, skipping this index.")
+    #             continue
+    #         except Exception as e:
+    #             print(f"Unexpected error at index {i}: {e}, skipping this index.")
+    #             continue
+    #
+    #     for signal in signals:
+    #         stop_flag.set()
+    #         decision_queue.put(signal)
+    #         stop_flag.wait()
+    #         stop_flag.clear()
+    #         self.alert_active = False  # Reset alert flag after processing
+    #         self.place_orders_outside_rth = False
 
-    def process_signals_and_place_orders(self, df, contract, decision_queue, stop_flag):
-        signals = []
+    def open_long_position(self):
+        self.in_long_position = True
+        self.in_short_position = False
+        # Άλλες ενέργειες για το άνοιγμα long θέσης
 
-        if self.alert_active:
-            return
+    def open_short_position(self):
+        self.in_short_position = True
+        self.in_long_position = False
+        # Άλλες ενέργειες για το άνοιγμα short θέσης
 
-        for i in range(len(df)):
-            try:
-                if df.at[i, 'Long_Entry'] and not self.in_long_position and not self.in_short_position:
-                    self.send_alert("Long Entry Position Open")
-                    signals.append(('long', i, contract, df.at[i, 'Close']))
-                    self.alert_active = True
-                    break
+    def close_long_position(self):
+        self.in_long_position = False
+        # Άλλες ενέργειες για το κλείσιμο long θέσης
 
-                elif df.at[i, 'Short_Entry'] and not self.in_long_position and not self.in_short_position:
-                    self.send_alert("Short Entry Position Open")
-                    signals.append(('short', i, contract, df.at[i, 'Close']))
-                    self.alert_active = True
-                    break
+    def close_short_position(self):
+        self.in_short_position = False
 
-                # elif df.at[i, 'Long_Exit'] and self.in_long_position:
-                #     self.send_alert("Long Exit Position Open")
-                #     signals.append(('exit_long', i, contract, df.at[i, 'Close']))
-                #     self.alert_active = True
-                #     break
-                #
-                # elif df.at[i, 'Short_Exit'] and self.in_short_position:
-                #     self.send_alert("Short Exit Position Open")
-                #     signals.append(('exit_short', i, contract, df.at[i, 'Close']))
-                #     self.alert_active = True
-                #     break
+    def process_signals_and_place_orders(self, df_dict, decision_queue, decision_flag):
+        print("Running process signals")
+        for contract_symbol, df in df_dict.items():
+            print(f"Processing signals for {contract_symbol}")
+            signals = []
 
-            except KeyError as e:
-                print(f"KeyError at index {i}: {e}, skipping this index.")
+            # Ελέγχουμε αν υπάρχει ενεργή ειδοποίηση για το σύμβολο
+            if self.alert_active.get(contract_symbol, False):
+                print(f"Alert already active for {contract_symbol}, skipping.")
                 continue
-            except Exception as e:
-                print(f"Unexpected error at index {i}: {e}, skipping this index.")
-                continue
 
-        for signal in signals:
-            stop_flag.set()
-            decision_queue.put(signal)
-            stop_flag.wait()
-            stop_flag.clear()
-            self.alert_active = False  # Reset alert flag after processing
-            self.place_orders_outside_rth = False
+            # Επεξεργασία των σημάτων ανά γραμμή στο DataFrame
+            for i in range(1, len(df)):
+                try:
+                    long_entry = df.get('Long_Entry', False).iloc[i]
+                    short_entry = df.get('Short_Entry', False).iloc[i]
+                    long_exit = df.get('Long_Exit', False).iloc[i]
+                    short_exit = df.get('Short_Exit', False).iloc[i]
+                    timestamp = df.at[i, 'Date']
+                    previous_close = df.at[i - 1, 'Close']
 
-    def handle_decision(self, app, decision_queue, stop_flag):
+                    # print(
+                    #     f"Row {i}: long_entry={long_entry}, short_entry={short_entry}, long_exit={long_exit}, short_exit={short_exit}")
+
+                    # Έλεγχος για αντικρουόμενα σήματα
+                    if (long_entry and long_exit) or (short_entry and short_exit):
+                        print(f"Conflicting signals for {contract_symbol}. No action taken.")
+                        continue
+
+                    if long_entry and short_entry:
+                        print(
+                            f"Both Long Entry and Short Entry signals present for {contract_symbol}. No action taken.")
+                        continue
+
+                    # Διαχείριση long entry signals
+                    if long_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
+                        signals.append((contract_symbol, 'long', i, previous_close, timestamp))
+                        print(f"Long entry signal detected: {signals[-1]}")
+                        self.alert_active[contract_symbol] = True
+                        break
+
+                    # Διαχείριση short entry signals
+                    elif short_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
+                        signals.append((contract_symbol, 'short', i, previous_close, timestamp))
+                        print(f"Short entry signal detected: {signals[-1]}")
+                        self.alert_active[contract_symbol] = True
+                        break
+
+                except KeyError as e:
+                    print(f"KeyError at index {i}: {e}, skipping this index.")
+                    continue
+                except Exception as e:
+                    print(f"Unexpected error at index {i}: {e}, skipping this index.")
+                    continue
+
+            if signals:
+                print(f"Signals to be added to queue: {signals}")
+                for signal in signals:
+                    decision_flag.set()
+                    decision_queue.put(signal)
+                    print(f"Signal added to queue: {signal}")
+                    decision_flag.wait()
+                    decision_flag.clear()
+                self.alert_active[contract_symbol] = False
+            else:
+                print(f"No signals found for {contract_symbol}")
+
+    # def handle_decision(self, app, decision_queue, decision_flag):
+    #     print("Handle Decision running...")
+    #     while True:
+    #         print("Waiting for signal from queue...")
+    #         signal = decision_queue.get()
+    #         print(f"Signal received from queue: {signal}")
+    #         # if signal == 'exit':
+    #         #     print("Exiting decision handling.")
+    #         #     break
+    #
+    #         contract_symbol, action, index, close_price, timestamp = signal
+    #         print(f"Handling decision: {signal}")
+    #
+    #         contract = next((c['contract'] for c in app.contracts if c['contract'].symbol == contract_symbol), None)
+    #         if contract is None:
+    #             print(f"Contract not found for symbol: {contract_symbol}")
+    #             continue
+    #
+    #         while app.nextValidOrderId is None:
+    #             print("Waiting for next valid order ID...")
+    #             sleep(1)
+    #         print(f"Next valid order ID is {app.nextValidOrderId}")
+    #
+    #         outside_rth = self.place_orders_outside_rth
+    #
+    #         if action == 'long':
+    #             print(f"Initializing contract for long position: {contract_symbol}")
+    #             self.initialize_contract(contract_symbol)
+    #             print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+    #
+    #             quantity = 100
+    #             profit_target_price = close_price + (100 / quantity)  # Θέλουμε $100 κέρδος για 100 μετοχές
+    #             stop_loss_price = close_price - (50 / quantity)
+    #             orders = app.place_bracket_order(contract, "BUY", 100, close_price, profit_target_price, stop_loss_price,
+    #                                     outside_rth=outside_rth)
+    #             print(f"Orders placed for {contract_symbol}: {orders}")
+    #             # print(f"Stop Loss Order: {orders.stop_loss}")
+    #             self.positions[contract_symbol]['in_long_position'] = True
+    #             self.positions[contract_symbol]['in_short_position'] = False
+    #             self.positions[contract_symbol]['order_id'] = app.nextValidOrderId
+    #             self.positions[contract_symbol]['status'] = 'Open'
+    #             print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+    #             self.display_positions()
+    #
+    #         elif action == 'short':
+    #             print(f"Initializing contract for short position: {contract_symbol}")
+    #             self.initialize_contract(contract_symbol)
+    #             print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+    #
+    #             quantity = 100
+    #             profit_target_price = close_price - (100 / quantity)
+    #             stop_loss_price = close_price + (50 / quantity)
+    #
+    #             orders = app.place_bracket_order(contract, "SELL", 100, close_price, profit_target_price, stop_loss_price,
+    #                                     outside_rth=outside_rth)
+    #             print(f"Orders placed for {contract_symbol}: {orders}")
+    #             # print(f"Stop Loss Order: {orders.stop_loss}")
+    #             self.positions[contract_symbol]['in_short_position'] = True
+    #             self.positions[contract_symbol]['in_long_position'] = False
+    #             self.positions[contract_symbol]['order_id'] = app.nextValidOrderId
+    #             self.positions[contract_symbol]['status'] = 'Open'
+    #             print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+    #             self.display_positions()
+    #
+    #         # elif action == 'exit_long':
+    #         #     print(f"{contract_symbol} - Long Exit detected at index {index}. Closing open BUY position...")
+    #         #     self.initialize_contract(contract_symbol)
+    #         #     position_to_close = self.positions[contract_symbol]
+    #         #     if position_to_close['in_long_position']:
+    #         #         close_order_id = app.nextValidOrderId
+    #         #         take_profit_price = close_price + 1
+    #         #         stop_loss_price = close_price - 1
+    #         #         app.place_bracket_order(contract_symbol, "SELL", 100, close_price, take_profit_price,
+    #         #                                 stop_loss_price,
+    #         #                                 outside_rth=outside_rth)
+    #         #         self.positions[contract_symbol]['in_long_position'] = False
+    #         #         self.positions[contract_symbol]['status'] = 'Closed'
+    #         #         self.display_positions()
+    #         #
+    #         # elif action == 'exit_short':
+    #         #     print(f"{contract_symbol} - Short Exit detected at index {index}. Closing open SELL position...")
+    #         #     self.initialize_contract(contract_symbol)
+    #         #     position_to_close = self.positions[contract_symbol]
+    #         #     if position_to_close['in_short_position']:
+    #         #         close_order_id = app.nextValidOrderId
+    #         #         take_profit_price = close_price - 1
+    #         #         stop_loss_price = close_price + 1
+    #         #         app.place_bracket_order(contract_symbol, "BUY", 100, close_price, take_profit_price,
+    #         #                                 stop_loss_price,
+    #         #                                 outside_rth=outside_rth)
+    #         #         self.positions[contract_symbol]['in_short_position'] = False
+    #         #         self.positions[contract_symbol]['status'] = 'Closed'
+    #         #         self.display_positions()
+    #
+    #         decision_flag.set()
+
+    def handle_decision(self, app, decision_queue, decision_flag):
+        print("Handle Decision running...")
         while True:
+            print("Waiting for signal from queue...")
             signal = decision_queue.get()
-            if signal == 'exit':
-                break
+            print(f"Signal received from queue: {signal}")
 
-            action, index, contract, close_price = signal
+            contract_symbol, action, index, close_price, timestamp = signal
+            print(f"Handling decision: {signal}")
 
-            # print(
-            #     f"[DEBUG] Handling decision - action: {action}, in_long_position: {self.in_long_position}, in_short_position: {self.in_short_position}, alert_active: {self.alert_active}")
+            # Εύρεση του συμβολαίου για το συγκεκριμένο σύμβολο
+            contract = next((c['contract'] for c in app.contracts if c['contract'].symbol == contract_symbol), None)
+            if contract is None:
+                print(f"Contract not found for symbol: {contract_symbol}")
+                continue
+
+            # Έλεγχος αν υπάρχει ήδη ανοιχτή θέση για το συμβόλαιο
+            if self.positions.get(contract_symbol, {}).get('status') == 'Open':
+                print(f"Position already open for {contract_symbol}. No new position will be opened.")
+                continue
+
+            # Χρήση των δεδομένων από το DataFrame που έχει ήδη υπολογιστεί
+            # current_row = df.iloc[index]
+            #
+            # long_entry_signal = current_row['Long_Entry']
+            # short_entry_signal = current_row['Short_Entry']
+            # long_exit_signal = current_row['Long_Exit']
+            # short_exit_signal = current_row['Short_Exit']
+
+            # Έλεγχος για αντικρουόμενα σήματα
+            # if (long_entry_signal and long_exit_signal) or (short_entry_signal and short_exit_signal):
+            #     print(f"Conflicting signals for {contract_symbol}. No action taken.")
+            #     continue
+            #
+            # if long_entry_signal and short_entry_signal:
+            #     print(f"Both Long Entry and Short Entry signals present for {contract_symbol}. No action taken.")
+            #     continue
 
             while app.nextValidOrderId is None:
                 print("Waiting for next valid order ID...")
                 sleep(1)
+            print(f"Next valid order ID is {app.nextValidOrderId}")
 
             outside_rth = self.place_orders_outside_rth
 
+            # if action == 'long' and long_entry_signal:
             if action == 'long':
-                app.place_bracket_order(contract, "BUY", 100, close_price, close_price + 100, close_price - 50,
-                                        outside_rth=outside_rth)
-                self.in_long_position = True
-                self.in_short_position = False
-                self.add_position('Long', app.nextValidOrderId, 'Open')
+                print(f"Initializing contract for long position: {contract_symbol}")
+                self.initialize_contract(contract_symbol)
+                print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+
+                quantity = 100
+                profit_target_price = close_price + (100 / quantity)
+                stop_loss_price = close_price - (50 / quantity)
+                orders = app.place_bracket_order(contract, "BUY", quantity, close_price, profit_target_price,
+                                                 stop_loss_price,
+                                                 outside_rth=outside_rth)
+                print(f"Orders placed for {contract_symbol}: {orders}")
+                self.positions[contract_symbol]['in_long_position'] = True
+                self.positions[contract_symbol]['in_short_position'] = False
+                self.positions[contract_symbol]['order_id'] = app.nextValidOrderId
+                self.positions[contract_symbol]['status'] = 'Open'
+                print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
                 self.display_positions()
 
-                # print(
-                #     f"[DEBUG] Long position opened - in_long_position: {self.in_long_position}, in_short_position: {self.in_short_position}")
-
+            # elif action == 'short' and short_entry_signal:
             elif action == 'short':
-                app.place_bracket_order(contract, "SELL", 100, close_price, close_price - 100, close_price + 50,
-                                        outside_rth=outside_rth)
+                print(f"Initializing contract for short position: {contract_symbol}")
+                self.initialize_contract(contract_symbol)
+                print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
 
-                self.in_short_position = True
-                self.in_long_position = False
-                # print(
-                #     f"[DEBUG] Short position opened - in_short_position: {self.in_short_position}, in_long_position: {self.in_long_position}")
-                self.add_position('Short', app.nextValidOrderId, 'Open')
+                quantity = 100
+                profit_target_price = close_price - (100 / quantity)
+                stop_loss_price = close_price + (50 / quantity)
+
+                orders = app.place_bracket_order(contract, "SELL", quantity, close_price, profit_target_price,
+                                                 stop_loss_price,
+                                                 outside_rth=outside_rth)
+                print(f"Orders placed for {contract_symbol}: {orders}")
+                self.positions[contract_symbol]['in_short_position'] = True
+                self.positions[contract_symbol]['in_long_position'] = False
+                self.positions[contract_symbol]['order_id'] = app.nextValidOrderId
+                self.positions[contract_symbol]['status'] = 'Open'
+                print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
                 self.display_positions()
 
-            # elif action == 'exit_long':
-            #     print(f"Long Exit detected at index {index}. Closing open BUY position...")
-            #     close_order = app.create_order(app.nextValidOrderId, "SELL", "MKT", 100, outsideRth=outside_rth)
-            #     app.placeOrder(app.nextValidOrderId, contract, close_order)
-            #     self.in_long_position = False
-            #     self.alert_active = False
-            #     # print(
-            #     #     f"[DEBUG] Long position closed - in_long_position: {self.in_long_position}, alert_active: {self.alert_active}")
-            #     if app.nextValidOrderId is not None:
-            #         self.update_position_status(app.nextValidOrderId - 3, 'Closed')
-            #     else:
-            #         print("[ERROR] nextValidOrderId is None. Cannot update position status.")
-            #     self.display_positions()
-            #
-            #     if app.profit_taker_order_id:
-            #         app.cancel_open_order(app.profit_taker_order_id)
-            #     if app.stop_loss_order_id:
-            #         app.cancel_open_order(app.stop_loss_order_id)
+            decision_flag.set()
 
-            # elif action == 'exit_short':
-            #     print(f"Short Exit detected at index {index}. Closing open SELL position...")
-            #     close_order = app.create_order(app.nextValidOrderId, "BUY", "MKT", 100, outsideRth=outside_rth)
-            #     app.placeOrder(app.nextValidOrderId, contract, close_order)
-            #     self.in_short_position = False
-            #     self.alert_active = False
-            #     # print(
-            #     #     f"[DEBUG] Short position closed - in_short_position: {self.in_short_position}, alert_active: {self.alert_active}")
-            #     if app.nextValidOrderId is not None:
-            #         self.update_position_status(app.nextValidOrderId - 3, 'Closed')
-            #     else:
-            #         print("[ERROR] nextValidOrderId is None. Cannot update position status.")
-            #     self.display_positions()
-            #
-            #     if app.profit_taker_order_id:
-            #         app.cancel_open_order(app.profit_taker_order_id)
-            #     if app.stop_loss_order_id:
-            #         app.cancel_open_order(app.stop_loss_order_id)
+    def handle_order_execution(self, orderId, status):
+        # Ελέγχουμε αν το order είναι συνδεδεμένο με κάποιο position
+        for contract_symbol, position in self.positions.items():
+            if position['order_id'] == orderId:
+                if status in ['Filled', 'Cancelled']:
+                    print(f"Order {orderId} for {contract_symbol} is {status}. Closing position.")
+                    self.positions[contract_symbol]['status'] = 'Closed'
+                    self.positions[contract_symbol]['in_long_position'] = False
+                    self.positions[contract_symbol]['in_short_position'] = False
+                    self.positions[contract_symbol]['order_id'] = None
+                    print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                    self.alert_active[contract_symbol] = False  # Reset alert flag for new signals
+                break
 
-            stop_flag.set()
-            # print("2. Continue current program")
-            # print("3. Return to main menu")
-            # choice = input("Enter 1, 2, or 3: ")
+    def display_positions(self):
+        print("\n--- Positions List ---")
+        for contract_symbol, pos in self.positions.items():
+            print(f"Contract: {contract_symbol}, Position Type: {'Long' if pos['in_long_position'] else 'Short'}, "
+                  f"Order ID: {pos['order_id']}, Status: {pos['status']}")
+        print("----------------------")
 
-            # if choice == '1':
-            #     decision_queue.put(('cancel', None, None))
-            # elif choice == '2':
-            #     decision_queue.put(('continue', None, None))
-            # elif choice == '3':
-            #     decision_queue.put(('menu', None, None))
-            #     stop_flag.set()
-            # else:
-            #     print("Invalid choice. Please try again.")
-            sleep(1)
 
     # def display_orders(self):
     #     orders = list(self.order_queue.queue)
     #     for order in orders:
     #         print(f"Order ID: {order.orderId}, Action: {order.action}, Quantity: {order.totalQuantity}")
     # ena antistoixo pou tha vlepw mono ta positions
+
+    # def stop_program_after_duration(duration, decision_flag):
+    #     #     sleep(duration)
+    #     #     decision_flag.set()
+    #     #     print("Program is stopping after the set duration.")
+
+    # @staticmethod
+    # def terminate_program(self):
+    #     print("2 ώρες έχουν περάσει. Τερματισμός προγράμματος.")
+    #     sys.exit(0)
 
     def listen_for_esc(self, decision_queue, stop_flag):
         while True:

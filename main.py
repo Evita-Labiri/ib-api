@@ -11,7 +11,7 @@ from order_manager import OrderManager
 def run_data_script():
     db = Database()
     app = IBApi(data_processor=None, db=db)
-    data_processor = DataProcessor(db)
+    data_processor = DataProcessor(db, app)
     app.data_processor = data_processor
     app.connect("127.0.0.1", 7497, 1)
 
@@ -19,16 +19,21 @@ def run_data_script():
     t1.start()
 
     default_ticker = "AAPL"
-    default_secType = "STK"
+    default_sec_type = "STK"
     default_exchange = "SMART"
     default_currency = "USD"
+    default_data_type = "minute"
 
     ticker = input(f"Enter the ticker (e.g., '{default_ticker}'): ").upper() or default_ticker
-    secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
+    sec_type = input(f"Enter the security type (e.g., '{default_sec_type}'): ").upper() or default_sec_type
     exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
     currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
+    data_type = input(f"Enter the data_type (e.g., '{default_data_type}'): ").upper() or default_data_type
 
-    contract = app.create_contract(ticker, secType, exchange, currency)
+
+    # reqId = 3
+    contract = app.create_contract(ticker, sec_type, exchange, currency, data_type)
+    # app.contracts.append({'reqId': reqId, 'contract': contract})
     app.set_ticker(ticker)
 
     interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
@@ -43,18 +48,19 @@ def run_data_script():
 
     # Request historical minute data
     print("Requesting minute data")
-    app.reqHistoricalData(
-        1,  # reqId for minute data
-        contract,  # contract details
-        "",  # end date/time (empty string for current date/time
-        "2 D",  # duration (2 months)
-        "1 min",  # bar size (1 minute)
-        "TRADES",  # data type
-        0,  # whether to include only regular trading hours data (1) or to include all trading hours data (0) in the historical data request.
-        1,  # 1 formats the date and time as human-readable strings (YYYYMMDD HH:MM:SS). 2 formats the date and time as Unix timestamps.
-        False,  # whether the client keep getting real-time updates of new data points or not (keep only the historical data after the initial receive).
-        []
-    )
+    app.update_minute_data_for_symbol(contract)
+    # app.reqHistoricalData(
+    #     1,  # reqId for minute data
+    #     contract,  # contract details
+    #     "",  # end date/time (empty string for current date/time
+    #     "4 D",  # duration (2 months)
+    #     "1 min",  # bar size (1 minute)
+    #     "TRADES",  # data type
+    #     0,  # whether to include only regular trading hours data (1) or to include all trading hours data (0) in the historical data request.
+    #     1,  # 1 formats the date and time as human-readable strings (YYYYMMDD HH:MM:SS). 2 formats the date and time as Unix timestamps.
+    #     False,  # whether the client keep getting real-time updates of new data points or not (keep only the historical data after the initial receive).
+    #     []
+    # )
 
     # Request historical daily data
     # print("Requesting daily data")
@@ -72,14 +78,17 @@ def run_data_script():
     #     []
     # )
     #
-    # app.reqMktData(
-    #     3,
-    #     contract,
-    #     "",
-    #     False,
-    #     False,
-    #     []
-    # )
+
+    time.sleep(2)
+    req_id_for_rt = app.get_reqId_for_contract(contract)
+    app.reqMktData(
+        req_id_for_rt,
+        contract,
+        "",
+        False,
+        False,
+        []
+    )
 
     main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
     main_thread.start()
@@ -94,9 +103,11 @@ def run_data_script():
 
 
 def run_order_script():
+    stop_flag = threading.Event()
+    decision_flag = threading.Event()
     db = Database()
     app = IBApi(data_processor=None, db=db)
-    data_processor = DataProcessor(db)
+    data_processor = DataProcessor(db, app)
     app.data_processor = data_processor
     order_manager = OrderManager()
     data_processor.order_manager = order_manager
@@ -105,10 +116,7 @@ def run_order_script():
     t1 = threading.Thread(target=app.run)
     t1.start()
 
-    default_symbol = "AAPL"
-    default_secType = "STK"
-    default_exchange = "SMART"
-    default_currency = "USD"
+    # contracts = []
 
     while True:
         outside_rth_input = input("Allow orders outside regular trading hours? (yes/no, default: no): ").lower() or "no"
@@ -124,18 +132,42 @@ def run_order_script():
         else:
             break
 
-    symbol = input(f"Enter the symbol (e.g., '{default_symbol}'): ").upper() or default_symbol
-    secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
-    exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
-    currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
+    while True:
+        default_symbol = "AAPL"
+        default_secType = "STK"
+        default_exchange = "SMART"
+        default_currency = "USD"
+        default_data_type = "minute"
 
-    while app.nextValidOrderId is None:
-        print("Waiting for TWS connection acknowledgment...")
-        time.sleep(1)
+        symbol = input(f"Enter the symbol (e.g., '{default_symbol}'): ").upper() or default_symbol
+        secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
+        exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
+        currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
+        data_type = input(f"Enter the data_type (e.g., '{default_data_type}'): ").upper() or default_data_type
 
-    print("Connection established, nextValidOrderId:", app.nextValidOrderId)
+        while app.nextValidOrderId is None:
+            print("Waiting for TWS connection acknowledgment...")
+            time.sleep(1)
 
-    contract = app.create_contract(symbol, secType, exchange, currency)
+        print("Connection established, nextValidOrderId:", app.nextValidOrderId)
+
+        # reqId = 3
+        contract = app.create_contract(symbol, secType, exchange, currency, data_type)
+        print(f"Created contract: {contract}")
+        req_id = app.get_reqId_for_contract(contract)
+        app.contracts.append({'reqId': req_id, 'contract': contract})
+        print("Current list of contracts:")
+        for idx, contract_entry in enumerate(app.contracts, start=1):
+            print(f"{idx}: reqId={contract_entry['reqId']}, contract={contract_entry['contract']}")
+
+        order_manager.initialize_contract(symbol)
+        # Ενημέρωση δεδομένων πριν την επεξεργασία
+        app.update_minute_data_for_symbol(contract)
+
+        time.sleep(80)
+        add_another = input("Do you want to add another contract? (yes/no): ").strip().lower()
+        if add_another != 'yes':
+            break
 
     print("Press ESC any time...")
     esc_listener_thread = threading.Thread(target=order_manager.listen_for_esc, args=(decision_queue, stop_flag))
@@ -152,8 +184,10 @@ def run_order_script():
     interval = data_processor.validate_interval(interval_input)
     data_processor.interval = interval
 
+    time.sleep(2)
+    req_id_for_rt = app.get_reqId_for_contract(contract)
     app.reqMktData(
-        3,
+        req_id_for_rt,
         contract,
         "",
         False,
@@ -161,30 +195,41 @@ def run_order_script():
         []
     )
 
+    # # 7200
+    # timer = threading.Timer(10, OrderManager.terminate_program)
+    # timer.start()
+
     print("Following main thread: ")
     main_thread = threading.Thread(target=app.order_main_thread_function,
-                                   args=(data_processor, interval, contract, order_manager, decision_queue, stop_flag))
+                                   args=(data_processor, interval, app.contracts, order_manager, decision_queue, decision_flag))
     main_thread.start()
 
+    print("Decision thread start")
     decision_thread = threading.Thread(target=order_manager.handle_decision,
                                        args=(app, decision_queue, stop_flag))
     decision_thread.start()
 
     try:
-        while True:
+        while not stop_flag.is_set():
+            print("Running order management...")
+            time.sleep(5)  # Μικρή καθυστέρηση για την αποφυγή υπερβολικής χρήσης CPU
             if stop_flag.is_set():
-                time.sleep(1)
+                print("Stop flag detected. Exiting main loop.")
+
     except KeyboardInterrupt:
         print("Interrupted by user, closing connection...")
     finally:
         app.close_connection()
         stop_flag.set()
-        # decision_thread.join()
+        decision_flag.set()
+        decision_thread.join()
         esc_listener_thread.join()
-        # main_thread.join()
+        main_thread.join()
+        print("All threads have been terminated.")
+
+    print("Order script stopped after 2 hours.")
 
 #         gia close me kleisti agora prepei na nai limit order kai fill outside reg hours
-#           outside rg hours == yes tha prepei na ginetai check kai sto tws fill outside trading hours
 
 def main():
     while True:
