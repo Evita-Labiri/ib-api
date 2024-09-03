@@ -326,26 +326,27 @@ class DataProcessor:
 
         # Initialize the signals columns
         entry_long_criteria = [
-            'EMA9_above_EMA20_long', 'EMA9_above_EMA200_long', 'EMA20_above_EMA200_long',
+            'EMA9_above_EMA20_long', 'EMA9_and_EMA20_above_EMA200_long',
             'Close_above_VWAP_long', 'MACD_above_Signal_long', 'MACD_above_zero_long',
-            'Price_crossed_above_BB_Lower_long'
         ]
+        # 'Price_crossed_above_BB_Lower_long'
 
         entry_short_criteria = [
-            'EMA9_below_EMA20_short', 'EMA9_below_EMA200_short', 'EMA20_below_EMA200_short',
+            'EMA9_below_EMA20_short', 'EMA9_and_EMA20_below_EMA200_short',
             'Close_below_VWAP_short', 'MACD_below_Signal_short', 'MACD_below_zero_short',
             'Price_crossed_below_BB_Upper_short'
         ]
 
         exit_long_criteria = [
             'EMA9_below_EMA20_exit_long', 'Close_below_VWAP_exit_long', 'MACD_below_Signal_exit_long',
-            'Price_touches_BB_Upper_exit_long'
         ]
+        # 'Price_touches_BB_Upper_exit_long'
 
         exit_short_criteria = [
             'EMA9_above_EMA20_exit_short', 'Close_above_VWAP_exit_short', 'MACD_above_Signal_exit_short',
-            'Price_touches_BB_Lower_exit_short'
+
         ]
+        # 'Price_touches_BB_Lower_exit_short'
 
         # Initialize the signal columns with False
         for col in entry_long_criteria + entry_short_criteria + exit_long_criteria + exit_short_criteria:
@@ -356,29 +357,37 @@ class DataProcessor:
         df['Long_Exit'] = False
         df['Short_Exit'] = False
 
-        for i in range(1, len(df)):
+        for i in range(2, len(df)):
             try:
                 if pd.isna(df['Close'].iloc[i]) or pd.isna(df['EMA9'].iloc[i]) or pd.isna(
                         df['EMA20'].iloc[i]) or pd.isna(df['EMA200'].iloc[i]):
                     continue
 
+                # print(f"Date: {df['Date'].iloc[i]}")
+                # print(f"EMA9[i-1]: {df['EMA9'].iloc[i - 1]}, EMA9[i-2]: {df['EMA9'].iloc[i - 2]}")
+                # print(f"EMA20[i-1]: {df['EMA20'].iloc[i - 1]}, EMA20[i-2]: {df['EMA20'].iloc[i - 2]}")
+                # print(f"EMA200[i-1]: {df['EMA200'].iloc[i - 1]}, EMA200[i-2]: {df['EMA200'].iloc[i - 2]}")
+                # print(f"Close[i-1]: {df['Close'].iloc[i - 1]}, VWAP[i-1]: {df['VWAP'].iloc[i - 1]}")
+                # print(f"MACD[i-1]: {df['MACD'].iloc[i - 1]}, MACD_Signal[i-2]: {df['MACD_Signal'].iloc[i - 2]}")
+
                 # Long Entry Criteria
-                if df['EMA9'].iloc[i] > df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] <= df['EMA20'].iloc[i - 1]:
+                if df['EMA9'].iloc[i - 1] > df['EMA20'].iloc[i - 1] and df['EMA9'].iloc[i - 1] > df['EMA20'].iloc[i - 2]:
                     df.at[i, 'EMA9_above_EMA20_long'] = True
-                if df['EMA9'].iloc[i] > df['EMA200'].iloc[i]:
-                    df.at[i, 'EMA9_above_EMA200_long'] = True
-                if df['EMA20'].iloc[i] > df['EMA200'].iloc[i]:
-                    df.at[i, 'EMA20_above_EMA200_long'] = True
-                if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
+                if df['EMA9'].iloc[i - 1] > df['EMA200'].iloc[i - 1] and df['EMA9'].iloc[i - 1] > df['EMA200'].iloc[i - 2]:
+                    if df['EMA20'].iloc[i - 1] > df['EMA200'].iloc[i - 1] and df['EMA20'].iloc[i - 1] > df['EMA200'].iloc[i - 2]:
+                        df.at[i, 'EMA9_and_EMA20_above_EMA200_long'] = True
+                # if df['EMA20'].iloc[i] > df['EMA200'].iloc[i]:
+                #     df.at[i, 'EMA20_above_EMA200_long'] = True
+                if df['Close'].iloc[i - 1] > df['VWAP'].iloc[i - 1] and df['Close'].iloc[i - 1] > df['VWAP'].iloc[i - 2]:
                     df.at[i, 'Close_above_VWAP_long'] = True
-                if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] <= df['MACD_Signal'].iloc[
-                    i - 1]:
+                if df['MACD'].iloc[i - 1] > df['MACD_Signal'].iloc[i - 1] and df['MACD'].iloc[i - 1] <= df['MACD_Signal'].iloc[i - 2]:
                     df.at[i, 'MACD_above_Signal_long'] = True
-                if df['MACD'].iloc[i] > 0 and df['MACD'].iloc[i - 1] <= 0:
+                if df['MACD'].iloc[i - 1] > 0 and df['MACD'].iloc[i - 2] > 0:
                     df.at[i, 'MACD_above_zero_long'] = True
-                if df['Close'].iloc[i] < df['BB_Lower'].iloc[i] and df['Close'].iloc[i - 1] >= df['BB_Lower'].iloc[
-                    i - 1]:
-                    df.at[i, 'Price_crossed_above_BB_Lower_long'] = True
+                # na tsekarw an ypologizetai swsta to reversal (check shmeiwseis)
+                # if df['Close'].iloc[i - 1] < df['BB_Lower'].iloc[i - 1] and df['Close'].iloc[i - 2] >= df['BB_Lower'].iloc[
+                #     i - 2]:
+                #     df.at[i, 'Price_crossed_above_BB_Lower_long'] = True
 
                 if any(df.loc[i, entry_long_criteria]):
                     df.at[i, 'Long_Entry'] = True
@@ -386,22 +395,22 @@ class DataProcessor:
                     self.order_manager.open_long_position()
 
                 # Short Entry Criteria
-                if df['EMA9'].iloc[i] < df['EMA20'].iloc[i] and df['EMA9'].iloc[i - 1] >= df['EMA20'].iloc[i - 1]:
+                if df['EMA9'].iloc[i - 1] < df['EMA20'].iloc[i - 1] and df['EMA9'].iloc[i - 1] < df['EMA20'].iloc[i - 2]:
                     df.at[i, 'EMA9_below_EMA20_short'] = True
-                if df['EMA9'].iloc[i] < df['EMA200'].iloc[i]:
-                    df.at[i, 'EMA9_below_EMA200_short'] = True
-                if df['EMA20'].iloc[i] < df['EMA200'].iloc[i]:
-                    df.at[i, 'EMA20_below_EMA200_short'] = True
-                if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
+                if df['EMA9'].iloc[i - 1] < df['EMA200'].iloc[i - 1] and df['EMA9'].iloc[i - 1] < df['EMA200'].iloc[i - 2]:
+                    if df['EMA20'].iloc[i - 1] < df['EMA200'].iloc[i - 1] and df['EMA20'].iloc[i - 1] < df['EMA200'].iloc[i - 2]:
+                        df.at[i, 'EMA9_and_EMA20_below_EMA200_short'] = True
+                # if df['EMA20'].iloc[i - 1] < df['EMA200'].iloc[i - 1]:
+                #     df.at[i, 'EMA20_below_EMA200_short'] = True
+                if df['Close'].iloc[i - 1] < df['VWAP'].iloc[i - 1] and df['Close'].iloc[i - 1] < df['VWAP'].iloc[i - 2]:
                     df.at[i, 'Close_below_VWAP_short'] = True
-                if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i] and df['MACD'].iloc[i - 1] >= df['MACD_Signal'].iloc[
-                    i - 1]:
+                if df['MACD'].iloc[i - 1] < df['MACD_Signal'].iloc[i - 1] and df['MACD'].iloc[i - 1] < df['MACD_Signal'].iloc[i - 2]:
                     df.at[i, 'MACD_below_Signal_short'] = True
-                if df['MACD'].iloc[i] < 0 and df['MACD'].iloc[i - 1] >= 0:
+                if df['MACD'].iloc[i - 1] < 0 and df['MACD'].iloc[i - 2] < 0:
                     df.at[i, 'MACD_below_zero_short'] = True
-                if df['Close'].iloc[i] > df['BB_Upper'].iloc[i] and df['Close'].iloc[i - 1] <= df['BB_Upper'].iloc[
-                    i - 1]:
-                    df.at[i, 'Price_crossed_below_BB_Upper_short'] = True
+                # if df['Close'].iloc[i - 1] > df['BB_Upper'].iloc[i - 1] and df['Close'].iloc[i - 2] <= df['BB_Upper'].iloc[
+                #     i - 2]:
+                #     df.at[i, 'Price_crossed_below_BB_Upper_short'] = True
 
                 if any(df.loc[i, entry_short_criteria]):
                     df.at[i, 'Short_Entry'] = True
@@ -410,14 +419,14 @@ class DataProcessor:
 
                 # Long Exit Criteria
                 if self.data_in_long_position:
-                    if df['EMA9'].iloc[i] < df['EMA20'].iloc[i]:
+                    if df['EMA9'].iloc[i - 1] < df['EMA20'].iloc[i - 1] and df['EMA9'].iloc[i - 1] < df['EMA20'].iloc[i - 2]:
                         df.at[i, 'EMA9_below_EMA20_exit_long'] = True
-                    if df['Close'].iloc[i] < df['VWAP'].iloc[i]:
+                    if df['Close'].iloc[i- 1] < df['VWAP'].iloc[i- 1] and df['Close'].iloc[i - 1] < df['VWAP'].iloc[i - 2]:
                         df.at[i, 'Close_below_VWAP_exit_long'] = True
-                    if df['MACD'].iloc[i] < df['MACD_Signal'].iloc[i]:
+                    if df['MACD'].iloc[i - 1] < df['MACD_Signal'].iloc[i- 1] and df['MACD'].iloc[i - 1] < df['MACD_Signal'].iloc[i - 2]:
                         df.at[i, 'MACD_below_Signal_exit_long'] = True
-                    if df['Close'].iloc[i] >= df['BB_Upper'].iloc[i]:
-                        df.at[i, 'Price_touches_BB_Upper_exit_long'] = True
+                    # if df['Close'].iloc[i- 1] >= df['BB_Upper'].iloc[i- 1]:
+                    #     df.at[i, 'Price_touches_BB_Upper_exit_long'] = True
 
                     if any(df.loc[i, exit_long_criteria]):
                         df.at[i, 'Long_Exit'] = True
@@ -425,14 +434,14 @@ class DataProcessor:
 
                 # Short Exit Criteria
                 if self.data_in_short_position:
-                    if df['EMA9'].iloc[i] > df['EMA20'].iloc[i]:
+                    if df['EMA9'].iloc[i - 1] > df['EMA20'].iloc[i - 1] and df['EMA9'].iloc[i - 1] > df['EMA20'].iloc[i - 2]:
                         df.at[i, 'EMA9_above_EMA20_exit_short'] = True
-                    if df['Close'].iloc[i] > df['VWAP'].iloc[i]:
+                    if df['Close'].iloc[i - 1] > df['VWAP'].iloc[i - 1] and df['Close'].iloc[i - 1] > df['VWAP'].iloc[i - 2]:
                         df.at[i, 'Close_above_VWAP_exit_short'] = True
-                    if df['MACD'].iloc[i] > df['MACD_Signal'].iloc[i]:
+                    if df['MACD'].iloc[i - 1] > df['MACD_Signal'].iloc[i - 1] and df['MACD'].iloc[i - 1] > df['MACD_Signal'].iloc[i - 2]:
                         df.at[i, 'MACD_above_Signal_exit_short'] = True
-                    if df['Close'].iloc[i] <= df['BB_Lower'].iloc[i]:
-                        df.at[i, 'Price_touches_BB_Lower_exit_short'] = True
+                    # if df['Close'].iloc[i- 1] <= df['BB_Lower'].iloc[i- 1]:
+                    #     df.at[i, 'Price_touches_BB_Lower_exit_short'] = True
 
                     if any(df.loc[i, exit_short_criteria]):
                         df.at[i, 'Short_Exit'] = True
@@ -458,47 +467,47 @@ class DataProcessor:
             print(f"Invalid interval '{user_input}', using no interval.")
             return None
 
-    def fill_gaps_in_data(self, df, contract, app):
-        """
-        Fills gaps in historical data by fetching the missing data from the API.
-        """
-        ny_tz = pytz.timezone('America/New_York')
-        # df['Date'] = pd.to_datetime(df['Date'])
-        # df['Date'] = df['Date'].dt.tz_localize(ny_tz, nonexistent='shift_forward', ambiguous='NaT')
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        df['Date'] = df['Date'].dt.tz_localize(ny_tz, nonexistent='shift_forward', ambiguous='NaT')
-        df = df.dropna(subset=['Date'])
-
-        df = df.set_index('Date')
-
-        # Δημιουργούμε μια σειρά από ημερομηνίες χωρίς κενά, σε ζώνη ώρας Νέας Υόρκης
-        all_times = pd.date_range(start=df.index.min(), end=df.index.max(), freq='1min', tz=ny_tz)
-
-        # Εντοπίζουμε τα κενά
-        missing_times = all_times.difference(df.index)
-
-        if not missing_times.empty:
-            print(f"Found missing data for {contract.symbol} from {missing_times[0]} to {missing_times[-1]}.")
-
-            for missing_time in missing_times:
-                start_time = missing_time - timedelta(minutes=2)
-                end_time = missing_time + timedelta(minutes=2)
-
-                # Σωστή μετατροπή σε UTC για το API request (αν απαιτείται από το API)
-                # start_time_utc = start_time.astimezone(pytz.utc).strftime('%Y%m%d %H:%M:%S')
-                # end_time_utc = end_time.astimezone(pytz.utc).strftime('%Y%m%d %H:%M:%S')
-
-                app.update_minute_data_for_symbol(contract)
-
-                # Μετά την κλήση, ενημερώνουμε το DataFrame με τα νέα δεδομένα
-                new_data = self.fetch_data_from_db('minute_data', start_time.strftime('%Y-%m-%d %H:%M:%S'),
-                                                   end_time.strftime('%Y-%m-%d %H:%M:%S'), ticker=contract.symbol)
-
-                if not new_data.empty:
-                    df = pd.concat([df, new_data])
-        df = df.sort_index()
-        df = df.reset_index()
-        return df
+    # def fill_gaps_in_data(self, df, contract, app):
+    #     """
+    #     Fills gaps in historical data by fetching the missing data from the API.
+    #     """
+    #     ny_tz = pytz.timezone('America/New_York')
+    #     # df['Date'] = pd.to_datetime(df['Date'])
+    #     # df['Date'] = df['Date'].dt.tz_localize(ny_tz, nonexistent='shift_forward', ambiguous='NaT')
+    #     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    #     df['Date'] = df['Date'].dt.tz_localize(ny_tz, nonexistent='shift_forward', ambiguous='NaT')
+    #     df = df.dropna(subset=['Date'])
+    #
+    #     df = df.set_index('Date')
+    #
+    #     # Δημιουργούμε μια σειρά από ημερομηνίες χωρίς κενά, σε ζώνη ώρας Νέας Υόρκης
+    #     all_times = pd.date_range(start=df.index.min(), end=df.index.max(), freq='1min', tz=ny_tz)
+    #
+    #     # Εντοπίζουμε τα κενά
+    #     missing_times = all_times.difference(df.index)
+    #
+    #     if not missing_times.empty:
+    #         print(f"Found missing data for {contract.symbol} from {missing_times[0]} to {missing_times[-1]}.")
+    #
+    #         for missing_time in missing_times:
+    #             start_time = missing_time - timedelta(minutes=2)
+    #             end_time = missing_time + timedelta(minutes=2)
+    #
+    #             # Σωστή μετατροπή σε UTC για το API request (αν απαιτείται από το API)
+    #             # start_time_utc = start_time.astimezone(pytz.utc).strftime('%Y%m%d %H:%M:%S')
+    #             # end_time_utc = end_time.astimezone(pytz.utc).strftime('%Y%m%d %H:%M:%S')
+    #
+    #             app.update_minute_data_for_symbol(contract)
+    #
+    #             # Μετά την κλήση, ενημερώνουμε το DataFrame με τα νέα δεδομένα
+    #             new_data = self.fetch_data_from_db('minute_data', start_time.strftime('%Y-%m-%d %H:%M:%S'),
+    #                                                end_time.strftime('%Y-%m-%d %H:%M:%S'), ticker=contract.symbol)
+    #
+    #             if not new_data.empty:
+    #                 df = pd.concat([df, new_data])
+    #     df = df.sort_index()
+    #     df = df.reset_index()
+    #     return df
 
     @staticmethod
     def resample_data(df, interval):
@@ -513,7 +522,7 @@ class DataProcessor:
 
         return resampled_df
 
-    def update_plot(self, contract, days=2, interval=None):
+    def update_plot(self, contract, days=4, interval=None):
         self.process_queue_data()
 
         # Εκτύπωση της λίστας real_time_data πριν τη δημιουργία της DataFrame
@@ -527,23 +536,37 @@ class DataProcessor:
 
         # print("Minute data from DB:")
         # print(df_minute.tail())
-        real_time_df = pd.DataFrame(self.real_time_data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        # real_time_df = pd.DataFrame(self.real_time_data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        if self.real_time_data:
+            print("Real-time data found!")
+            real_time_df = pd.DataFrame(self.real_time_data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        else:
+            print("Real-time data is empty!")
+            real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+
         real_time_df['Ticker'] = contract.symbol
 
         # Εκτύπωση των real-time δεδομένων για έλεγχο
-        # print("Real-time DataFrame before combining:")
-        # print(real_time_df.tail())
+        print("Real-time DataFrame before combining:")
+        print(real_time_df.tail())
 
         # combined_data = pd.concat([
         #     df_minute,
         #     real_time_df
         # ])
 
+        # Check if both dataframes have the 'Date' column
+        if 'Date' not in df_minute.columns:
+            print("df_minute does not have 'Date' column")
+        if 'Date' not in real_time_df.columns:
+            print("real_time_df does not have 'Date' column")
+
         dataframes_to_concat = [df for df in [df_minute, real_time_df] if not df.empty and df.notna().any().any()]
 
         if dataframes_to_concat:
             combined_data = pd.concat(dataframes_to_concat)
         else:
+            print("No valid dataframes to concatenate!")
             combined_data = pd.DataFrame()
             # print("Real-time Data combined:")
         # print(real_time_df.tail())
@@ -553,28 +576,32 @@ class DataProcessor:
 
         # combined_data = self.fill_gaps_in_data(combined_data, contract, app=self.api_helper)
 
-        combined_data['Date'] = pd.to_datetime(combined_data['Date'])
-        combined_data.sort_values(by='Date', inplace=True)
-        combined_data_ind = self.calculate_indicators(combined_data)
+        if not combined_data.empty and 'Date' in combined_data.columns:
+            combined_data['Date'] = pd.to_datetime(combined_data['Date'])
+            combined_data.sort_values(by='Date', inplace=True)
+            combined_data_ind = self.calculate_indicators(combined_data)
 
         # print("Combined Data ind:")
         # print(combined_data_ind.tail())
 
-        if interval:
-            resampled_data = self.resample_data(combined_data, interval)
-            resampled_data = self.calculate_indicators(resampled_data)
-            resampled_data = self.generate_signals(resampled_data)
-        else:
-            resampled_data = self.generate_signals(combined_data_ind)
-        #
-        # print("Combined Data:")
-        # print(combined_data.tail())
-        #
-        # print("Resampled Data:")
-        # print(resampled_data.tail())
+            if interval:
+                resampled_data = self.resample_data(combined_data, interval)
+                resampled_data = self.calculate_indicators(resampled_data)
+                resampled_data = self.generate_signals(resampled_data)
+            else:
+                resampled_data = self.generate_signals(combined_data_ind)
+            #
+            # print("Combined Data:")
+            # print(combined_data.tail())
+            #
+            print("Resampled Data:")
+            print(resampled_data.tail())
 
-        self.export_to_excel(resampled_data)
-        return resampled_data
+            self.export_to_excel(resampled_data)
+            return resampled_data
+        else:
+            print("No data to process.")
+            return None
 
     @staticmethod
     def export_to_excel(df, filename="output.xlsx"):

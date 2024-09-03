@@ -78,18 +78,21 @@ def run_data_script():
     #     []
     # )
     #
-
     time.sleep(2)
-    req_id_for_rt = app.get_reqId_for_contract(contract)
-    app.reqMktData(
-        req_id_for_rt,
-        contract,
-        "",
-        False,
-        False,
-        []
-    )
 
+    print(f"Requesting real-time data for {contract.symbol} on {contract.exchange}")
+    req_id_for_rt = app.get_reqId_for_contract(contract)
+    if req_id_for_rt is not None:
+        app.reqMktData(
+            req_id_for_rt,
+            contract,
+            "",
+            False,  # False σημαίνει συνεχής ροή δεδομένων, όχι μόνο snapshot
+            False,
+            []
+        )
+    else:
+        print("Failed to obtain request ID for the contract.")
     main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
     main_thread.start()
 

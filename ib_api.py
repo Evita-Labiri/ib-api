@@ -175,6 +175,7 @@ class IBApi(EClient, EWrapper):
             keepUpToDate=False,  # Συνεχής λήψη δεδομένων σε πραγματικό χρόνο
             chartOptions=[]
         )
+
         # Βρείτε την τελευταία ημερομηνία που έχετε δεδομένα στη βάση
         # self.reqMktData(
         #     4,
@@ -224,10 +225,13 @@ class IBApi(EClient, EWrapper):
         else:
             minutes = duration.seconds // 60
             return f"{minutes} M"
+
     def tickPrice(self, reqId, tickType, price, attrib):
+        print(f"Tick Price for reqId {reqId}: {price}")
+
         # print("Tick Price called now: ")
-        # timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
-        # print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
+        timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
+        print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
         if tickType == 4:  # Last
             timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
             with self.lock:
@@ -268,9 +272,10 @@ class IBApi(EClient, EWrapper):
                     print(f"Contract not found for reqId: {reqId}")
 
     def tickSize(self, reqId, tickType, size):
+        print(f"Tick Size for reqId {reqId}: {size}")
         # print("Tick Size called now: ")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
-        # print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
+        print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
 
         if tickType == 5:  # Volume
             with (self.lock):
