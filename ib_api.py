@@ -9,6 +9,8 @@ from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ibapi.order import Order
 import threading
+
+from globals import stop_flag
 from order_manager import OrderManager
 
 class IBApi(EClient, EWrapper):
@@ -163,18 +165,18 @@ class IBApi(EClient, EWrapper):
         duration_str = "1 D"  # Καθορίζει τη διάρκεια που θέλουμε να κατεβάσουμε τα δεδομένα
 
         # Κατεβάστε δεδομένα από την τελευταία ημερομηνία και συνεχίστε τη λήψη δεδομένων σε πραγματικό χρόνο
-        self.reqHistoricalData(
-            reqId=reqId,  # Χρησιμοποιήστε ένα μοναδικό reqId για κάθε αίτημα
-            contract=contract,
-            endDateTime="",  # Αφήστε το κενό για συνεχή λήψη δεδομένων
-            durationStr=duration_str,  # Μπορείτε να προσαρμόσετε τη διάρκεια ανάλογα με τις ανάγκες σας
-            barSizeSetting="1 min",  # Διάστημα ενός λεπτού
-            whatToShow="TRADES",  # Είδος δεδομένων
-            useRTH=0,
-            formatDate=1,
-            keepUpToDate=False,  # Συνεχής λήψη δεδομένων σε πραγματικό χρόνο
-            chartOptions=[]
-        )
+        # self.reqHistoricalData(
+        #     reqId=reqId,  # Χρησιμοποιήστε ένα μοναδικό reqId για κάθε αίτημα
+        #     contract=contract,
+        #     endDateTime="",  # Αφήστε το κενό για συνεχή λήψη δεδομένων
+        #     durationStr=duration_str,  # Μπορείτε να προσαρμόσετε τη διάρκεια ανάλογα με τις ανάγκες σας
+        #     barSizeSetting="1 min",  # Διάστημα ενός λεπτού
+        #     whatToShow="TRADES",  # Είδος δεδομένων
+        #     useRTH=0,
+        #     formatDate=1,
+        #     keepUpToDate=False,  # Συνεχής λήψη δεδομένων σε πραγματικό χρόνο
+        #     chartOptions=[]
+        # )
 
         # Βρείτε την τελευταία ημερομηνία που έχετε δεδομένα στη βάση
         # self.reqMktData(
@@ -267,7 +269,9 @@ class IBApi(EClient, EWrapper):
                 if contract_info:
                     contract = contract_info['contract']
                     print(f"Found contract {contract.symbol} for reqId {reqId}")
-                    self.data_processor.update_plot(contract=contract, interval=self.data_processor.interval)
+                    self.data_processor.update_plot(contract=contract,
+                                                    interval_entry=self.data_processor.interval_entry,
+                                                    interval_exit=self.data_processor.interval_exit)
                 else:
                     print(f"Contract not found for reqId: {reqId}")
 
@@ -302,7 +306,9 @@ class IBApi(EClient, EWrapper):
             if contract_info:
                 contract = contract_info['contract']
                 print(f"Found contract {contract.symbol} for reqId {reqId}")
-                self.data_processor.update_plot(contract=contract, interval=self.data_processor.interval)
+                self.data_processor.update_plot(contract=contract,
+                                                interval_entry=self.data_processor.interval_entry,
+                                                interval_exit=self.data_processor.interval_exit)
             else:
                 print(f"Contract not found for reqId: {reqId}")
 
@@ -410,7 +416,7 @@ class IBApi(EClient, EWrapper):
     # def reset_reqId(self, start_value=1):
     #     self.current_reqId = start_value
 
-    def main_thread_function(self, interval):
+    def main_thread_function(self, interval_entry, interval_exit):
         while True:
             if not self.data_processor.data_ready_queue.empty():
                 _ = self.data_processor.data_ready_queue.get()
@@ -418,12 +424,12 @@ class IBApi(EClient, EWrapper):
                 for contract_dict in self.contracts:
                     contract = contract_dict['contract']  # Παίρνουμε το πραγματικό αντικείμενο Contract από το λεξικό
                     if contract:  # Βεβαιωθείτε ότι το contract δεν είναι None
-                        self.data_processor.update_plot(interval=interval, contract=contract)
+                        self.data_processor.update_plot(interval_entry=interval_entry,interval_exit=interval_exit, contract=contract)
                     else:
                         print(f"Contract for reqId {contract_dict['reqId']} is not set.")
 
-    def order_main_thread_function(self, data_processor, interval, contracts, order_manager, decision_queue,
-                                   decision_flag):
+    def order_main_thread_function(self, data_processor, interval_entry, interval_exit, contracts, order_manager, decision_queue,
+                               decision_flag):
         print(f"Received contracts: {contracts}")
 
         while True:
@@ -435,28 +441,45 @@ class IBApi(EClient, EWrapper):
                 contract = contract_dict['contract']
                 if contract:
                     symbol = contract.symbol
-                    combined_data = data_processor.update_plot(interval=interval, contract=contract)
-                    print(f"Combined data for {symbol}: {combined_data.head()}")
+                    df_entry, df_exit = data_processor.update_plot(interval_entry=interval_entry,
+                                                                   interval_exit=interval_exit, contract=contract)
 
-                    if combined_data.empty:
-                        print(f"Warning: Combined data for {symbol} is empty.")
+                    print(f"Entry DataFrame for {symbol}:")
+                    print(df_entry)
+                    print(f"Exit DataFrame for {symbol}:")
+                    print(df_exit)
+
+                    if df_entry.empty or df_exit.empty:
+                        print(f"Warning: Entry or Exit data for {symbol} is empty.")
                     else:
-                        print(f"Data for {symbol} looks valid with {len(combined_data)} records.")
+                        print(
+                            f"Data for {symbol} looks valid with {len(df_entry)} entry records and {len(df_exit)} exit records.")
 
-                    combined_data_dict[symbol] = combined_data
+                    combined_data_dict[symbol] = {'entry': df_entry, 'exit': df_exit}
 
                 else:
                     print(f"Contract for reqId {contract_dict['reqId']} is not set.")
 
             if combined_data_dict:
-                order_manager.process_signals_and_place_orders(combined_data_dict, decision_queue, decision_flag)
+                for symbol, data in combined_data_dict.items():
+                    if isinstance(data['entry'], pd.DataFrame) and isinstance(data['exit'], pd.DataFrame):
+                        if not data['entry'].empty and not data['exit'].empty:
+                            print(
+                                f"Processing signals for {symbol}. Entry has {len(data['entry'])} rows and Exit has {len(data['exit'])} rows.")
+                            order_manager.process_signals_and_place_orders(data['entry'], data['exit'], decision_queue,
+                                                                           decision_flag, symbol)
+                        else:
+                            print(f"Warning: Entry or Exit data for {symbol} is empty.")
+                    else:
+                        print(
+                            f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")
             else:
                 print("No data to process signals.")
 
             try:
                 signal = decision_queue.get(timeout=5)  # Αν δεν υπάρχει signal μέσα σε 5 δευτερόλεπτα, συνέχισε
                 print("Decision queue is not empty, handling decision")
-                # order_manager.handle_decision(self, decision_queue, stop_flag)  # Εδώ θα χειριστείτε το signal
+                order_manager.handle_decision(signal, decision_queue, stop_flag)   # Εδώ θα χειριστείτε το signal
             except queue.Empty:
                 print("Decision queue is empty, no signals to process")
 

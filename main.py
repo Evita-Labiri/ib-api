@@ -30,15 +30,23 @@ def run_data_script():
     currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
     data_type = input(f"Enter the data_type (e.g., '{default_data_type}'): ").upper() or default_data_type
 
-
     # reqId = 3
     contract = app.create_contract(ticker, sec_type, exchange, currency, data_type)
     # app.contracts.append({'reqId': reqId, 'contract': contract})
     app.set_ticker(ticker)
 
-    interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
-    interval = data_processor.validate_interval(interval_input)
-    data_processor.interval = interval
+    # interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
+    # interval = data_processor.validate_interval(interval_input)
+    # data_processor.interval = interval
+
+    interval_entry_input = input("Enter the resample interval for entry signals (e.g., '1min', '5min', '10min'): ")
+    interval_entry = data_processor.validate_interval(interval_entry_input)
+
+    interval_exit_input = input("Enter the resample interval for exit signals (e.g., '1min', '5min', '10min'): ")
+    interval_exit = data_processor.validate_interval(interval_exit_input)
+
+    data_processor.interval_entry = interval_entry  # Αποθηκεύουμε το interval για τα entry signals
+    data_processor.interval_exit = interval_exit  # Αποθηκεύουμε το interval για τα exit signals
 
     while app.nextValidOrderId is None:
         print("Waiting for TWS connection acknowledgment...")
@@ -93,7 +101,8 @@ def run_data_script():
         )
     else:
         print("Failed to obtain request ID for the contract.")
-    main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
+    # main_thread = threading.Thread(target=app.main_thread_function, args=(interval,))
+    main_thread = threading.Thread(target=app.main_thread_function, args=(interval_entry, interval_exit))
     main_thread.start()
 
     try:
@@ -103,7 +112,6 @@ def run_data_script():
         print("Interrupted by user, closing connection...")
     finally:
         app.close_connection()
-
 
 def run_order_script():
     stop_flag = threading.Event()
@@ -119,7 +127,7 @@ def run_order_script():
     t1 = threading.Thread(target=app.run)
     t1.start()
 
-    # contracts = []
+    contracts = []
 
     while True:
         outside_rth_input = input("Allow orders outside regular trading hours? (yes/no, default: no): ").lower() or "no"
@@ -167,7 +175,7 @@ def run_order_script():
         # Ενημέρωση δεδομένων πριν την επεξεργασία
         app.update_minute_data_for_symbol(contract)
 
-        time.sleep(80)
+        # time.sleep(80)
         add_another = input("Do you want to add another contract? (yes/no): ").strip().lower()
         if add_another != 'yes':
             break
@@ -183,28 +191,45 @@ def run_order_script():
     # stop_loss = float(input("Enter stop loss: "))
     # app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss)
 
-    interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
-    interval = data_processor.validate_interval(interval_input)
-    data_processor.interval = interval
+    # interval_input = input("Enter the resample interval (e.g., '1min', '5min', '10min'): ")
+    # interval = data_processor.validate_interval(interval_input)
+    # data_processor.interval = interval
+
+    # Ζητάμε από τον χρήστη τα intervals για entry και exit signals
+    interval_entry_input = input("Enter the resample interval for entry signals (e.g., '1min', '5min', '10min'): ")
+    interval_entry = data_processor.validate_interval(interval_entry_input)
+
+    interval_exit_input = input("Enter the resample interval for exit signals (e.g., '1min', '5min', '10min'): ")
+    interval_exit = data_processor.validate_interval(interval_exit_input)
+
+    data_processor.interval_entry = interval_entry  # Αποθηκεύουμε το interval για τα entry signals
+    data_processor.interval_exit = interval_exit
 
     time.sleep(2)
-    req_id_for_rt = app.get_reqId_for_contract(contract)
-    app.reqMktData(
-        req_id_for_rt,
-        contract,
-        "",
-        False,
-        False,
-        []
-    )
+    for contract_dict in contracts:
+        contract = contract_dict['contract']
+        req_id_for_rt = app.get_reqId_for_contract(contract)
+        if req_id_for_rt is not None:
+            app.reqMktData(
+                req_id_for_rt,
+                contract,
+                "",
+                False,  # False σημαίνει συνεχής ροή δεδομένων
+                False,
+                []
+            )
+        else:
+            print(f"Failed to obtain request ID for the contract {contract.symbol}")
 
     # # 7200
     # timer = threading.Timer(10, OrderManager.terminate_program)
     # timer.start()
 
     print("Following main thread: ")
-    main_thread = threading.Thread(target=app.order_main_thread_function,
-                                   args=(data_processor, interval, app.contracts, order_manager, decision_queue, decision_flag))
+    # main_thread = threading.Thread(target=app.order_main_thread_function,
+    #                                args=(data_processor, interval, app.contracts, order_manager, decision_queue, decision_flag))
+    main_thread = threading.Thread(target=app.order_main_thread_function, args=(
+        data_processor, interval_entry, interval_exit, app.contracts, order_manager, decision_queue, decision_flag))
     main_thread.start()
 
     print("Decision thread start")
