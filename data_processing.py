@@ -133,14 +133,15 @@ class DataProcessor:
                 #     self.data_in_long_position = True
                 #     self.order_manager.open_long_position()
 
-                first_three_criteria_long = (
+                all_the_criteria_long = (
                         df['EMA9_above_EMA20_long'].iloc[i] == True and
                         df['EMA9_and_EMA20_above_EMA200_long'].iloc[i] == True and
-                        df['Close_above_VWAP_long'].iloc[i] == True
+                        df['Close_above_VWAP_long'].iloc[i] == True and
+                        df['MACD_above_Signal_long'] == True and
+                        df['MACD_above_zero_long'] == True
                 )
 
-                # Εάν τα τρία πρώτα κριτήρια ή το MACD > 0, εκτελείται η εντολή
-                if first_three_criteria_long or df['MACD_above_zero_long'].iloc[i] == True:
+                if all_the_criteria_long or df['MACD_above_zero_long'].iloc[i] == True:
                     df.at[i, 'Long_Entry'] = True
                     self.data_in_long_position = True
                     self.order_manager.open_long_position()
@@ -168,14 +169,16 @@ class DataProcessor:
                 #     self.data_in_short_position = True
                 #     self.order_manager.open_short_position()
 
-                first_three_criteria_short = (
+                all_the_criteria_short = (
                         df['EMA9_below_EMA20_short'].iloc[i] == True and
                         df['EMA9_and_EMA20_below_EMA200_short'].iloc[i] == True and
-                        df['Close_below_VWAP_short'].iloc[i] == True
+                        df['Close_below_VWAP_short'].iloc[i] == True and
+                        df['MACD_below_Signal_short'] == True and
+                        df['MACD_below_zero_short'] == True
                 )
 
                 # Εάν τα τρία πρώτα κριτήρια ή το MACD < 0, εκτελείται η εντολή
-                if first_three_criteria_short or df['MACD_below_zero_short'].iloc[i] == True:
+                if all_the_criteria_short or df['MACD_below_zero_short'].iloc[i] == True:
                     df.at[i, 'Short_Entry'] = True
                     self.data_in_short_position = True
                     self.order_manager.open_short_position()
@@ -296,55 +299,61 @@ class DataProcessor:
         start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
         df_minute = self.fetch_data_from_db('minute_data', start_date, end_date, ticker=contract.symbol)
+        df_minute.set_index('Date', inplace=True)
 
         # print("Minute data from DB:")
         # print(df_minute.tail())
-        # real_time_df = pd.DataFrame(self.real_time_data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
-        # if self.real_time_data and any(self.real_time_data):
-        #     print("Real-time data found!")
-        #     print(self.real_time_data)
-        #     real_time_df = pd.DataFrame(self.real_time_data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
-        #     real_time_df['Date'] = pd.to_datetime(real_time_df['Date'])
-        #     real_time_df.set_index('Date', inplace=True)
-        #     real_time_df['Ticker'] = contract.symbol
-        #     real_time_df = self.resample_data(real_time_df, '1min')
-        # else:
-        #     print("Real-time data is empty!")
-        #     real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        #
+        # print("Minute data DataFrame with datetime check:")
+        # print(df_minute.dtypes)
+
+        real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
 
         if self.real_time_data and any(self.real_time_data):
             print("Real-time data found!")
             print(self.real_time_data)
 
-            # Ελέγχουμε αν τα δεδομένα έχουν έγκυρα στοιχεία σε όλες τις στήλες
-            valid_real_time_data = [row for row in self.real_time_data if all(row)]
-            if valid_real_time_data:
-                real_time_df = pd.DataFrame(valid_real_time_data,
+            if self.real_time_data and all(
+                    row[1:] != [None, None, None, None, None] and row[1:] != [0.0, 0.0, 0.0, 0.0, 0.0] for row in
+                    self.real_time_data):
+                real_time_df = pd.DataFrame(self.real_time_data,
                                             columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
-                real_time_df['Date'] = pd.to_datetime(real_time_df['Date'])
+                real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
+
+                # print("Real-time DataFrame with datetime check:")
+                # print(real_time_df.dtypes)
+
+                # real_time_df['Date'] = pd.to_datetime(real_time_df['Date']).dt.tz_localize('America/New_York', nonexistent='shift_forward')
+                # real_time_df['Date'] = real_time_df['Date'].dt.tz_convert(None)
+
                 real_time_df.set_index('Date', inplace=True)
                 real_time_df['Ticker'] = contract.symbol
-                real_time_df = self.resample_data(real_time_df, '1min')
+                print("Valid real-time data found, DataFrame created:")
+                print(real_time_df)
             else:
                 print("All real-time data rows are invalid, creating an empty DataFrame.")
                 real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
-        else:
-            print("Real-time data is empty!")
-            real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
 
         # Εκτύπωση των real-time δεδομένων για έλεγχο
-        print("Real-time DataFrame before combining:")
-        print(real_time_df.tail())
+        # print("Real-time DataFrame before combining:")
+        # print(real_time_df.tail())
 
-        dataframes_to_concat = [df for df in [df_minute, real_time_df] if not df.empty and df.notna().any().any()]
+        dataframes_to_concat = [df for df in [df_minute, real_time_df] if not df.empty]
         combined_data = pd.concat(dataframes_to_concat)
+        # print('Combined Data right after combination')
+        # print(combined_data.tail())
 
         if not combined_data.empty:
-            # combined_data['Date'] = pd.to_datetime(combined_data.index)
+        #     combined_data.reset_index(drop=False, inplace=True)
+            if 'Date' in combined_data.columns:
+                combined_data['Date'] = pd.to_datetime(combined_data['Date'], errors='coerce')
+
             if 'Date' in combined_data.columns:
                 combined_data.set_index('Date', inplace=True)
 
             combined_data.sort_values(by='Date', inplace=True)
+            print('Combined Data')
+            print(combined_data.tail())
 
             df_entry = self.resample_data(combined_data, interval_entry)
             df_entry = self.calculate_indicators(df_entry)
@@ -357,11 +366,19 @@ class DataProcessor:
             df_entry = self.generate_signals(df_entry)
             df_exit = self.generate_signals(df_exit)
 
-            print("1-Minute Data with Signals:")
-            print(df_exit.tail())
+            # print(f"Exit {interval_exit} Data with Signals:")
+            # print(df_exit.tail())
+            #
+            # print(f"Entry {interval_entry} Data with Signals:")
+            # print(df_entry.tail())
 
-            print(f"{interval_entry} Data with Signals:")
-            print(df_entry.tail())
+            # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_exit
+            print(f"Exit {interval_exit} Data with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
+            print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
+
+            # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
+            print(f"Entry {interval_entry} Data with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
+            print(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
 
             # Export dataframes to Excel files with different names based on the interval
             self.export_to_excel(df_entry, filename=f"signals_{interval_entry}.xlsx")

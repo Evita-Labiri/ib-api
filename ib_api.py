@@ -162,23 +162,23 @@ class IBApi(EClient, EWrapper):
                 '%Y%m%d %H:%M:%S')  # Μετατροπή ημερομηνίας σε σωστή μορφή
 
         # Δεν χρειάζεται το end_date για συνεχή λήψη δεδομένων
-        duration_str = "1 D"  # Καθορίζει τη διάρκεια που θέλουμε να κατεβάσουμε τα δεδομένα
+        duration_str = "3 D"  # Καθορίζει τη διάρκεια που θέλουμε να κατεβάσουμε τα δεδομένα
 
         # Κατεβάστε δεδομένα από την τελευταία ημερομηνία και συνεχίστε τη λήψη δεδομένων σε πραγματικό χρόνο
-        # self.reqHistoricalData(
-        #     reqId=reqId,  # Χρησιμοποιήστε ένα μοναδικό reqId για κάθε αίτημα
-        #     contract=contract,
-        #     endDateTime="",  # Αφήστε το κενό για συνεχή λήψη δεδομένων
-        #     durationStr=duration_str,  # Μπορείτε να προσαρμόσετε τη διάρκεια ανάλογα με τις ανάγκες σας
-        #     barSizeSetting="1 min",  # Διάστημα ενός λεπτού
-        #     whatToShow="TRADES",  # Είδος δεδομένων
-        #     useRTH=0,
-        #     formatDate=1,
-        #     keepUpToDate=False,  # Συνεχής λήψη δεδομένων σε πραγματικό χρόνο
-        #     chartOptions=[]
-        # )
+        self.reqHistoricalData(
+            reqId=reqId,  # Χρησιμοποιήστε ένα μοναδικό reqId για κάθε αίτημα
+            contract=contract,
+            endDateTime="",  # Αφήστε το κενό για συνεχή λήψη δεδομένων
+            durationStr=duration_str,  # Μπορείτε να προσαρμόσετε τη διάρκεια ανάλογα με τις ανάγκες σας
+            barSizeSetting="1 min",  # Διάστημα ενός λεπτού
+            whatToShow="TRADES",  # Είδος δεδομένων
+            useRTH=0,
+            formatDate=1,
+            keepUpToDate=False,  # Συνεχής λήψη δεδομένων σε πραγματικό χρόνο
+            chartOptions=[]
+        )
 
-        # Βρείτε την τελευταία ημερομηνία που έχετε δεδομένα στη βάση
+        # τελευταία ημερομηνία που έχετε δεδομένα στη βάση
         # self.reqMktData(
         #     4,
         #     contract,
@@ -350,6 +350,11 @@ class IBApi(EClient, EWrapper):
         stop_loss.parentId = parentOrderId
         stop_loss.transmit = True
 
+        # Print order details for debugging
+        print(f"Parent Order ID: {parentOrderId}, Action: {action}, Limit Price: {limit_price}")
+        print(f"Take Profit Order ID: {parentOrderId + 1}, Action: {take_profit_action}, Limit Price: {profit_target}")
+        print(f"Stop Loss Order ID: {parentOrderId + 2}, Action: {stop_loss_action}, Stop Price: {stop_loss}")
+
         return [parent, take_profit, stop_loss]
 
     def place_bracket_order(self, contract, action, quantity, limit_price, profit_target, stop_loss, outside_rth=False):
@@ -479,7 +484,7 @@ class IBApi(EClient, EWrapper):
             try:
                 signal = decision_queue.get(timeout=5)  # Αν δεν υπάρχει signal μέσα σε 5 δευτερόλεπτα, συνέχισε
                 print("Decision queue is not empty, handling decision")
-                order_manager.handle_decision(signal, decision_queue, stop_flag)   # Εδώ θα χειριστείτε το signal
+                # order_manager.handle_decision(self, signal, stop_flag)   # Εδώ θα χειριστείτε το signal
             except queue.Empty:
                 print("Decision queue is empty, no signals to process")
 

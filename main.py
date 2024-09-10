@@ -127,8 +127,6 @@ def run_order_script():
     t1 = threading.Thread(target=app.run)
     t1.start()
 
-    contracts = []
-
     while True:
         outside_rth_input = input("Allow orders outside regular trading hours? (yes/no, default: no): ").lower() or "no"
         outside_rth = outside_rth_input == "yes"
@@ -205,11 +203,22 @@ def run_order_script():
     data_processor.interval_entry = interval_entry  # Αποθηκεύουμε το interval για τα entry signals
     data_processor.interval_exit = interval_exit
 
-    time.sleep(2)
-    for contract_dict in contracts:
+    # print(f"Type of contracts: {type(app.contracts)}")
+    # print(f"Contracts list before loop: {app.contracts}")
+    # print(f"Length of contracts: {len(app.contracts)}")
+
+    print("Requesting real time data")
+    for contract_dict in app.contracts:
+        print("In the for loop")
         contract = contract_dict['contract']
+        print(f"Processing contract: {contract.symbol}")
+
         req_id_for_rt = app.get_reqId_for_contract(contract)
+        print(f"The req Id is: {req_id_for_rt}")
+
         if req_id_for_rt is not None:
+            print(f"Requesting real-time data for {contract.symbol} with req_id: {req_id_for_rt}")
+
             app.reqMktData(
                 req_id_for_rt,
                 contract,
