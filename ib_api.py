@@ -524,7 +524,7 @@ class IBApi(EClient, EWrapper):
                     print(f"Contract for reqId {contract_dict['reqId']} is not set.")
 
             if combined_data_dict:
-                print(f"Combined data dictionary: {combined_data_dict}")
+                # print(f"Combined data dictionary: {combined_data_dict}")
                 for symbol, data in combined_data_dict.items():
                     if isinstance(data['entry'], pd.DataFrame) and isinstance(data['exit'], pd.DataFrame):
                         if not data['entry'].empty and not data['exit'].empty:

@@ -15,34 +15,6 @@ class DataProcessor:
         self.data_in_short_position = False
         self.place_orders_outside_rth = False
         self.order_manager = OrderManager()
-        # self.ticker = None
-
-    # def process_queue_data(self):
-    #     while not self.data_ready_queue.empty():
-    #         data = self.data_ready_queue.get()
-    #
-    #         if isinstance(data, dict):
-    #             ticker = data['Ticker']
-    #             if ticker not in self.real_time_data:
-    #                 self.real_time_data[ticker] = []
-    #
-    #             self.real_time_data[ticker].append(data)
-
-    # def process_queue_data(self):
-    #     while not self.data_ready_queue.empty():
-    #         data = self.data_ready_queue.get()
-    #
-    #         if isinstance(data, dict):
-    #             ticker = data['Ticker']
-    #             if ticker not in self.real_time_data:
-    #                 self.real_time_data[ticker] = pd.DataFrame(
-    #                     columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
-    #
-    #             # Δημιουργία νέας γραμμής ως DataFrame
-    #             new_row = pd.DataFrame([data], columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
-    #
-    #             # Προσθήκη της νέας γραμμής στο DataFrame του ticker
-    #             self.real_time_data[ticker] = pd.concat([self.real_time_data[ticker], new_row], ignore_index=True)
 
     def process_queue_data(self):
         while not self.data_ready_queue.empty():
@@ -432,7 +404,10 @@ class DataProcessor:
         # print("Real-time DataFrame before combining:")
         # print(real_time_df.tail())
 
-        dataframes_to_concat = [df for df in [df_minute, real_time_df] if not df.empty]
+        real_time_df_filtered = real_time_df[real_time_df['Ticker'] == ticker]
+        print(real_time_df_filtered.tail())
+
+        dataframes_to_concat = [df for df in [df_minute, real_time_df_filtered] if not df.empty]
         combined_data = pd.concat(dataframes_to_concat)
         # print('Combined Data right after combination')
         # print(combined_data.tail())
