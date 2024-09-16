@@ -18,7 +18,7 @@ class IBApi(EClient, EWrapper):
         EClient.__init__(self, wrapper=self)
         self.nextValidOrderId = None
         self.data = []
-        self.real_time_data = []
+        self.real_time_data = {}
         self.lock = threading.Lock()
         self.ticker = None
         self.historical_data_downloaded = False  # Flag to check if historical data is downloaded
@@ -256,12 +256,10 @@ class IBApi(EClient, EWrapper):
 
     def tickPrice(self, reqId, tickType, price, attrib):
         print(f"Tick Price for reqId {reqId}: {price}")
-
-        # print("Tick Price called now: ")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
         print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
+
         if tickType == 4:  # Last
-            timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
             with self.lock:
                 if reqId not in self.ohlcv_data:
                     self.ohlcv_data[reqId] = {
@@ -279,22 +277,29 @@ class IBApi(EClient, EWrapper):
                     if price < self.ohlcv_data[reqId]['low']:
                         self.ohlcv_data[reqId]['low'] = price
 
-                self.real_time_data.append([
-                    timestamp,
-                    self.ohlcv_data[reqId]['open'],
-                    self.ohlcv_data[reqId]['high'],
-                    self.ohlcv_data[reqId]['low'],
-                    self.ohlcv_data[reqId]['close'],
-                    float(self.ohlcv_data[reqId]['volume'])
-                ])
-                self.data_processor.data_ready_queue.put(self.real_time_data[-1])
-                # print(f"Appended real-time data: {self.real_time_data[-1]}")  # Debug print
-                # contract_entry = next((entry for entry in self.contracts if entry['reqId'] == reqId), None)
-
                 contract_info = self.reqId_info.get(reqId)
                 if contract_info:
                     contract = contract_info['contract']
-                    print(f"Found contract {contract.symbol} for reqId {reqId}")
+                    ticker = contract.symbol
+                    print(f"Found contract {ticker} for reqId {reqId}")
+
+                    # Αποθήκευση των δεδομένων ως DataFrame
+                    if ticker not in self.real_time_data:
+                        self.real_time_data[ticker] = pd.DataFrame(
+                            columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+
+                    new_row = pd.DataFrame([{
+                        'Date': timestamp,
+                        'Open': self.ohlcv_data[reqId]['open'],
+                        'High': self.ohlcv_data[reqId]['high'],
+                        'Low': self.ohlcv_data[reqId]['low'],
+                        'Close': self.ohlcv_data[reqId]['close'],
+                        'Volume': float(self.ohlcv_data[reqId]['volume']),
+                        'Ticker': ticker
+                    }])
+
+                    self.real_time_data[ticker] = pd.concat([self.real_time_data[ticker], new_row], ignore_index=True)
+                    self.data_processor.data_ready_queue.put(self.real_time_data[ticker].iloc[-1])
                     self.data_processor.update_plot(contract=contract,
                                                     interval_entry=self.data_processor.interval_entry,
                                                     interval_exit=self.data_processor.interval_exit)
@@ -303,40 +308,52 @@ class IBApi(EClient, EWrapper):
 
     def tickSize(self, reqId, tickType, size):
         print(f"Tick Size for reqId {reqId}: {size}")
-        # print("Tick Size called now: ")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
         print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
 
-        if tickType == 5:  # Volume
-            with (self.lock):
-                if reqId in self.ohlcv_data:
-                    self.ohlcv_data[reqId]['volume'] = size
-                else:
-                    self.ohlcv_data[reqId] = {
-                        'timestamp': timestamp,
-                        'open': 0,
-                        'high': 0,
-                        'low': 0,
-                        'close': 0,
-                        'volume': size
-                    }
+        contract_info = self.reqId_info.get(reqId)
+        if contract_info:
+            contract = contract_info['contract']
+            ticker = contract.symbol
+            print(f"Found contract {ticker} for reqId {reqId}")
 
-            # print(f"Updated OHLCV data for {reqId}: {self.ohlcv_data[reqId]}")  # Debug print
-            # contract_entry = next((entry for entry in self.contracts if entry['reqId'] == reqId), None)
-            # if contract_entry:
-            #     contract = contract_entry['contract']
-            #     self.data_processor.update_plot(contract=contract, interval=self.data_processor.interval)
-            # else:
-            #     print(f"Contract not found for reqId: {reqId}")
-            contract_info = self.reqId_info.get(reqId)
-            if contract_info:
-                contract = contract_info['contract']
-                print(f"Found contract {contract.symbol} for reqId {reqId}")
-                self.data_processor.update_plot(contract=contract,
-                                                interval_entry=self.data_processor.interval_entry,
-                                                interval_exit=self.data_processor.interval_exit)
-            else:
-                print(f"Contract not found for reqId: {reqId}")
+            if tickType == 5:  # Volume
+                with self.lock:
+                    if reqId in self.ohlcv_data:
+                        self.ohlcv_data[reqId]['volume'] = size
+                    else:
+                        self.ohlcv_data[reqId] = {
+                            'timestamp': timestamp,
+                            'open': 0,
+                            'high': 0,
+                            'low': 0,
+                            'close': 0,
+                            'volume': size
+                        }
+
+                    # Αποθήκευση των δεδομένων ως DataFrame
+                    if ticker not in self.real_time_data:
+                        self.real_time_data[ticker] = pd.DataFrame(
+                            columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+
+                    new_row = pd.DataFrame([{
+                        'Date': timestamp,
+                        'Open': self.ohlcv_data[reqId]['open'],
+                        'High': self.ohlcv_data[reqId]['high'],
+                        'Low': self.ohlcv_data[reqId]['low'],
+                        'Close': self.ohlcv_data[reqId]['close'],
+                        'Volume': float(self.ohlcv_data[reqId]['volume']),
+                        'Ticker': ticker
+                    }])
+
+                    self.real_time_data[ticker] = pd.concat([self.real_time_data[ticker], new_row], ignore_index=True)
+                    self.data_processor.data_ready_queue.put(self.real_time_data[ticker].iloc[-1])
+                    print(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
+                    self.data_processor.update_plot(contract=contract,
+                                                    interval_entry=self.data_processor.interval_entry,
+                                                    interval_exit=self.data_processor.interval_exit)
+        else:
+            print(f"Contract not found for reqId: {reqId}")
 
     def create_order(self, orderId, action, orderType, quantity, limitPrice=None, auxPrice=None, outsideRth=False):
         order = Order()

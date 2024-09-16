@@ -208,21 +208,20 @@ def run_order_script():
 
     print("Requesting real time data")
     for contract_dict in app.contracts:
-        print("In the for loop")
+        # print("In the for loop")
         contract = contract_dict['contract']
-        print(f"Processing contract: {contract.symbol}")
+        # print(f"Processing contract: {contract.symbol}")
 
         req_id_for_rt = app.get_reqId_for_contract(contract)
         print(f"The req Id is: {req_id_for_rt}")
 
         if req_id_for_rt is not None:
             print(f"Requesting real-time data for {contract.symbol} with req_id: {req_id_for_rt}")
-
             app.reqMktData(
                 req_id_for_rt,
                 contract,
                 "",
-                False,  # False σημαίνει συνεχής ροή δεδομένων
+                False,
                 False,
                 []
             )

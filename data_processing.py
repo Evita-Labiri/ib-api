@@ -8,19 +8,76 @@ class DataProcessor:
     def __init__(self, db, api_helper):
         self.db = db
         self.api_helper = api_helper
-        self.real_time_data = []
+        self.real_time_data = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker'])
         self.interval = None
         self.data_ready_queue = queue.Queue()
         self.data_in_long_position = False
         self.data_in_short_position = False
         self.place_orders_outside_rth = False
         self.order_manager = OrderManager()
-        self.ticker = None
+        # self.ticker = None
+
+    # def process_queue_data(self):
+    #     while not self.data_ready_queue.empty():
+    #         data = self.data_ready_queue.get()
+    #
+    #         if isinstance(data, dict):
+    #             ticker = data['Ticker']
+    #             if ticker not in self.real_time_data:
+    #                 self.real_time_data[ticker] = []
+    #
+    #             self.real_time_data[ticker].append(data)
+
+    # def process_queue_data(self):
+    #     while not self.data_ready_queue.empty():
+    #         data = self.data_ready_queue.get()
+    #
+    #         if isinstance(data, dict):
+    #             ticker = data['Ticker']
+    #             if ticker not in self.real_time_data:
+    #                 self.real_time_data[ticker] = pd.DataFrame(
+    #                     columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+    #
+    #             # Δημιουργία νέας γραμμής ως DataFrame
+    #             new_row = pd.DataFrame([data], columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+    #
+    #             # Προσθήκη της νέας γραμμής στο DataFrame του ticker
+    #             self.real_time_data[ticker] = pd.concat([self.real_time_data[ticker], new_row], ignore_index=True)
 
     def process_queue_data(self):
         while not self.data_ready_queue.empty():
             data = self.data_ready_queue.get()
-            self.real_time_data.append(data)
+
+            # Εκτύπωση για να δείτε τι επιστρέφει η ουρά
+            print(f"Data fetched from queue: {data}")
+
+            if isinstance(data, pd.Series):
+                data = data.to_dict()
+
+            if isinstance(data, dict):
+                ticker = data.get('Ticker')
+                if not ticker:
+                    print("Ticker missing in data, skipping...")
+                    continue
+
+                # Βεβαιωθείτε ότι τα δεδομένα περιέχουν όλες τις απαραίτητες στήλες
+                required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker']
+                missing_columns = [col for col in required_columns if col not in data]
+                if missing_columns:
+                    print(f"Missing columns in data for {ticker}: {missing_columns}")
+                    continue
+
+                # Δημιουργία νέας γραμμής ως DataFrame
+                new_row = pd.DataFrame([data], columns=required_columns)
+
+                # Προσθήκη της νέας γραμμής στο ενιαίο DataFrame
+                self.real_time_data = pd.concat([self.real_time_data, new_row], ignore_index=True)
+
+                # Εκτύπωση του DataFrame μετά την προσθήκη
+                print(f"Updated DataFrame with new data:")
+                print(self.real_time_data.tail())
+
+        return self.real_time_data
 
     def fetch_data_from_db(self, table_name, start_date=None, end_date=None, ticker=None):
         return self.db.fetch_data_from_db(table_name, start_date, end_date, ticker)
@@ -312,11 +369,11 @@ class DataProcessor:
         return resampled_df
 
     def update_plot(self, contract, days=7,  interval_entry=None, interval_exit=None):
-        self.process_queue_data()
+        real_time_data = self.process_queue_data()
 
         # Εκτύπωση της λίστας real_time_data πριν τη δημιουργία της DataFrame
-        # print("Real-time Data List:")
-        # print(self.real_time_data)
+        print("Real-time Data List:")
+        print(self.real_time_data)
 
         end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
@@ -330,32 +387,46 @@ class DataProcessor:
         # print("Minute data DataFrame with datetime check:")
         # print(df_minute.dtypes)
 
-        real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        ticker = contract.symbol
 
-        if self.real_time_data and any(self.real_time_data):
-            print("Real-time data found!")
-            print(self.real_time_data)
+        # filtered_real_time_data = [row for row in self.real_time_data.get(ticker, [])]
+        #
+        # if filtered_real_time_data and all(
+        #         row[1:] != [None, None, None, None, None] and row[1:] != [0.0, 0.0, 0.0, 0.0, 0.0] for row in
+        #         filtered_real_time_data):
+        real_time_df = pd.DataFrame(real_time_data,
+                                    columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker'])
+        real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
 
-            if self.real_time_data and all(
-                    row[1:] != [None, None, None, None, None] and row[1:] != [0.0, 0.0, 0.0, 0.0, 0.0] for row in
-                    self.real_time_data):
-                real_time_df = pd.DataFrame(self.real_time_data,
-                                            columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
-                real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
+        print("Real time df: ")
+        print(real_time_df)
 
-                # print("Real-time DataFrame with datetime check:")
-                # print(real_time_df.dtypes)
+        # if ticker in real_time_data and not real_time_df.empty:
+        #     real_time_df = real_time_data[ticker]
+        # else:
+        #     real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
 
-                # real_time_df['Date'] = pd.to_datetime(real_time_df['Date']).dt.tz_localize('America/New_York', nonexistent='shift_forward')
-                # real_time_df['Date'] = real_time_df['Date'].dt.tz_convert(None)
+        # print("Real-time DataFrame with datetime check:")
+        # print(real_time_df.dtypes)
 
-                real_time_df.set_index('Date', inplace=True)
-                real_time_df['Ticker'] = contract.symbol
-                print("Valid real-time data found, DataFrame created:")
-                print(real_time_df)
-            else:
-                print("All real-time data rows are invalid, creating an empty DataFrame.")
-                real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        # print("Real-time DataFrame")
+        # print(real_time_df)
+
+        if 'Date' in real_time_df.columns:
+            real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')  # Βεβαιώσου ότι είναι datetime
+            real_time_df.set_index('Date', inplace=True)
+            print("Valid real-time data found, DataFrame created:")
+            print(real_time_df)
+        else:
+            print("Column 'Date' is missing, cannot set as index")
+            print(real_time_df.columns)
+
+        # real_time_df['Ticker'] = contract.symbol
+        print("Valid real-time data found, DataFrame created:")
+        print(real_time_df)
+        # else:
+        #     print("All real-time data rows are invalid, creating an empty DataFrame.")
+        #     real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
 
         # Εκτύπωση των real-time δεδομένων για έλεγχο
         # print("Real-time DataFrame before combining:")
@@ -375,8 +446,8 @@ class DataProcessor:
                 combined_data.set_index('Date', inplace=True)
 
             combined_data.sort_values(by='Date', inplace=True)
-            # print('Combined Data')
-            # print(combined_data.tail())
+            print('Combined Data')
+            print(combined_data.tail())
             #
             # print("Df_entry resampling")
             df_entry = self.resample_data(combined_data, interval_entry)
@@ -428,6 +499,47 @@ class DataProcessor:
         else:
             print("No data to process.")
             return None
+
+
+        # if not real_time_df.empty:
+        #     print("Real-time data found!")
+        #     real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
+        #     real_time_df.set_index('Date', inplace=True)
+        #     print(real_time_df)
+
+        # dataframes_to_concat = [df for df in [df_minute, real_time_df] if not df.empty and df['Date'].notna().all()]
+        # combined_data = pd.concat(dataframes_to_concat)
+        # print(combined_data)
+        #
+        # if not combined_data.empty:
+        #     if 'Date' in combined_data.columns:
+        #         combined_data['Date'] = pd.to_datetime(combined_data['Date'], errors='coerce')
+        #         combined_data.set_index('Date', inplace=True)
+        #
+        #     df_entry = self.resample_data(combined_data, interval_entry)
+        #     df_entry = self.calculate_indicators(df_entry)
+        #
+        #     df_exit = self.resample_data(combined_data, interval_exit)
+        #     df_exit = self.calculate_indicators(df_exit)
+        #
+        #     df_entry = self.generate_signals(df_entry)
+        #     df_exit = self.generate_signals(df_exit)
+        #
+        #     print(
+        #         f"Entry {interval_entry} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
+        #     print(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
+        #
+        #     print(
+        #         f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
+        #     print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
+        #
+        #     self.export_to_excel(df_entry, filename=f"signals_{interval_entry}.xlsx")
+        #     self.export_to_excel(df_exit, filename=f"signals_{interval_exit}.xlsx")
+        #
+        #     return df_entry, df_exit
+        # else:
+        #     print("No data to process.")
+        #     return None
 
     @staticmethod
     def export_to_excel(df, filename="output.xlsx"):
