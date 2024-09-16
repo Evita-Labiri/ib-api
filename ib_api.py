@@ -177,7 +177,7 @@ class IBApi(EClient, EWrapper):
                 '%Y%m%d %H:%M:%S')  # Μετατροπή ημερομηνίας σε σωστή μορφή
 
         # Δεν χρειάζεται το end_date για συνεχή λήψη δεδομένων
-        duration_str = "3 D"  # Καθορίζει τη διάρκεια που θέλουμε να κατεβάσουμε τα δεδομένα
+        duration_str = "1 D"  # Καθορίζει τη διάρκεια που θέλουμε να κατεβάσουμε τα δεδομένα
 
         # Κατεβάστε δεδομένα από την τελευταία ημερομηνία και συνεχίστε τη λήψη δεδομένων σε πραγματικό χρόνο
         self.reqHistoricalData(
@@ -249,9 +249,10 @@ class IBApi(EClient, EWrapper):
             self.connect("127.0.0.1", 7497, 1)
             if self.isConnected():
                 print("Reconnected to API.")
+                sleep(2)
             else:
                 print("Failed to reconnect, setting stop_flag.")
-                # stop_flag.set()
+    #             stop_flag.set()
 
     def tickPrice(self, reqId, tickType, price, attrib):
         print(f"Tick Price for reqId {reqId}: {price}")
@@ -404,7 +405,7 @@ class IBApi(EClient, EWrapper):
                     self.placeOrder(o.orderId, contract, o)
                     print(f"Placed order: {o.orderId} for contract: {contract.symbol}")
                     self.nextValidOrderId += 1
-                    sleep(0.5)
+                    sleep(1)
 
                 return bracket
             except Exception as e:
@@ -489,10 +490,10 @@ class IBApi(EClient, EWrapper):
                     df_entry, df_exit = data_processor.update_plot(interval_entry=interval_entry,
                                                                    interval_exit=interval_exit, contract=contract)
 
-                    print(f"Entry DataFrame for {symbol}:")
-                    print(df_entry)
-                    print(f"Exit DataFrame for {symbol}:")
-                    print(df_exit)
+                    # print(f"Entry DataFrame for {symbol}:")
+                    # print(df_entry)
+                    # print(f"Exit DataFrame for {symbol}:")
+                    # print(df_exit)
 
                     if df_entry.empty or df_exit.empty:
                         print(f"Warning: Entry or Exit data for {symbol} is empty.")
@@ -523,9 +524,8 @@ class IBApi(EClient, EWrapper):
                 print("No data to process signals.")
 
             try:
-                decision_queue.get(timeout=10)  # Αν δεν υπάρχει signal μέσα σε 5 δευτερόλεπτα, συνέχισε
+                decision_queue.get()  # timeoute=60
                 print("Decision queue is not empty, handling decision")
-                # order_manager.handle_decision(self, signal, stop_flag)   # Εδώ θα χειριστείτε το signal
             except queue.Empty:
                 print("Decision queue is empty, no signals to process")
 

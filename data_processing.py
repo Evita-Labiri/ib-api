@@ -154,10 +154,10 @@ class DataProcessor:
                     self.data_in_long_position = True
                     self.order_manager.open_long_position()
 
-                # For testing reasons
-                if any(df.loc[i, entry_long_criteria]):
-                    df.at[i, 'Long_Entry'] = True
-                    self.order_manager.close_long_position()
+                # # For testing reasons
+                # if any(df.loc[i, entry_long_criteria]):
+                #     df.at[i, 'Long_Entry'] = True
+                #     self.order_manager.close_long_position()
 
                 # Short Entry Criteria
                 if df['EMA9'].iloc[i - 1] < df['EMA20'].iloc[i - 1] and df['EMA9'].iloc[i - 1] < df['EMA20'].iloc[i - 2]:
@@ -375,31 +375,31 @@ class DataProcessor:
                 combined_data.set_index('Date', inplace=True)
 
             combined_data.sort_values(by='Date', inplace=True)
-            print('Combined Data')
-            print(combined_data.tail())
-
-            print("Df_entry resampling")
+            # print('Combined Data')
+            # print(combined_data.tail())
+            #
+            # print("Df_entry resampling")
             df_entry = self.resample_data(combined_data, interval_entry)
-            print(df_entry.tail())
-            print("Df_entry indicators")
+            # print(df_entry.tail())
+            # print("Df_entry indicators")
             df_entry = self.calculate_indicators(df_entry)
-            print(df_entry.tail())
+            # print(df_entry.tail())
 
         # Resample and process for exit signals
-            print("Df_exit resampling")
+        #     print("Df_exit resampling")
             df_exit = self.resample_data(combined_data, interval_exit)
-            print(df_exit.tail())
-            print("Df_exit indicators")
+            # print(df_exit.tail())
+            # print("Df_exit indicators")
             df_exit = self.calculate_indicators(df_exit)
-            print(df_exit.tail())
+            # print(df_exit.tail())
 
             # Generate signals for entry and exit
-            print("Df_entry signals")
+            # print("Df_entry signals")
             df_entry = self.generate_signals(df_entry)
-            print(df_entry.tail())
-            print("Df_exit indicators")
+            # print(df_entry.tail())
+            # print("Df_exit indicators")
             df_exit = self.generate_signals(df_exit)
-            print(df_exit.tail())
+            # print(df_exit.tail())
 
             # print(f"Exit {interval_exit} Data with Signals:")
             # print(df_exit.tail())

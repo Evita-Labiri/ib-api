@@ -143,115 +143,114 @@ class OrderManager:
 
     def process_signals_and_place_orders(self, df_entry, df_exit, decision_queue, decision_flag, contract_symbol):
         print(f"Running process signals for {contract_symbol}")
+        # with self.lock:
+        signals = []
 
-        with self.lock:
-            signals = []
+        if not isinstance(df_entry, pd.DataFrame):
+            print(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
+            return
+        if not isinstance(df_exit, pd.DataFrame):
+            print(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
+            return
 
-            if not isinstance(df_entry, pd.DataFrame):
-                print(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
-                return
-            if not isinstance(df_exit, pd.DataFrame):
-                print(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
-                return
+        # Ελέγχουμε αν υπάρχει ενεργή ειδοποίηση για το σύμβολο
+        if self.alert_active.get(contract_symbol, False):
+            print(f"Alert already active for {contract_symbol}, skipping.")
+            return
 
-            # Ελέγχουμε αν υπάρχει ενεργή ειδοποίηση για το σύμβολο
-            if self.alert_active.get(contract_symbol, False):
-                print(f"Alert already active for {contract_symbol}, skipping.")
-                return
+        try:
+            df_entry['Date'] = pd.to_datetime(df_entry['Date'], errors='coerce').dt.tz_localize(None)
+            df_exit['Date'] = pd.to_datetime(df_exit['Date'], errors='coerce').dt.tz_localize(None)
 
-            try:
-                df_entry['Date'] = pd.to_datetime(df_entry['Date'], errors='coerce').dt.tz_localize(None)
-                df_exit['Date'] = pd.to_datetime(df_exit['Date'], errors='coerce').dt.tz_localize(None)
+            i = len(df_entry) - 1
+            # Παίρνουμε το timestamp από το df_entry
+            timestamp = df_entry.iloc[i]['Date']
 
-                i = len(df_entry) - 1
-                # Παίρνουμε το timestamp από το df_entry
-                timestamp = df_entry.iloc[i]['Date']
+            # Διασφαλίζουμε ότι το timestamp είναι tz-naive (χωρίς ζώνη ώρας)
+            if pd.api.types.is_datetime64_any_dtype(timestamp):
+                timestamp = timestamp.tz_localize(None)
 
-                # Διασφαλίζουμε ότι το timestamp είναι tz-naive (χωρίς ζώνη ώρας)
-                if pd.api.types.is_datetime64_any_dtype(timestamp):
-                    timestamp = timestamp.tz_localize(None)
+            # Παίρνουμε τα δεδομένα απευθείας από το DataFrame αντί για Series
+            # long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
+            # short_entry = df_entry.at[i, 'Short_Entry'] if 'Short_Entry' in df_entry.columns else False
+            #
+            # # Παίρνουμε τα δεδομένα από το df_exit για την ίδια χρονική στιγμή
+            # if i < len(df_exit):
+            #     long_exit = df_exit.at[i, 'Long_Exit'] if 'Long_Exit' in df_exit.columns else False
+            #     short_exit = df_exit.at[i, 'Short_Exit'] if 'Short_Exit' in df_exit.columns else False
+            # else:
+            #     long_exit = False
+            #     short_exit = False
 
-                # Παίρνουμε τα δεδομένα απευθείας από το DataFrame αντί για Series
-                # long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
-                # short_entry = df_entry.at[i, 'Short_Entry'] if 'Short_Entry' in df_entry.columns else False
-                #
-                # # Παίρνουμε τα δεδομένα από το df_exit για την ίδια χρονική στιγμή
-                # if i < len(df_exit):
-                #     long_exit = df_exit.at[i, 'Long_Exit'] if 'Long_Exit' in df_exit.columns else False
-                #     short_exit = df_exit.at[i, 'Short_Exit'] if 'Short_Exit' in df_exit.columns else False
-                # else:
-                #     long_exit = False
-                #     short_exit = False
+            long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
+            short_entry = df_entry.at[i, 'Short_Entry'] if 'Short_Entry' in df_entry.columns else False
+            long_exit = df_exit.at[i, 'Long_Exit'] if 'Long_Exit' in df_exit.columns else False
+            short_exit = df_exit.at[i, 'Short_Exit'] if 'Short_Exit' in df_exit.columns else False
 
-                long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
-                short_entry = df_entry.at[i, 'Short_Entry'] if 'Short_Entry' in df_entry.columns else False
-                long_exit = df_exit.at[i, 'Long_Exit'] if 'Long_Exit' in df_exit.columns else False
-                short_exit = df_exit.at[i, 'Short_Exit'] if 'Short_Exit' in df_exit.columns else False
+            previous_close = df_entry.at[i - 1, 'Close'] if i > 0 else None
 
-                previous_close = df_entry.at[i - 1, 'Close'] if i > 0 else None
-
-                # Έλεγχος για αντικρουόμενα σήματα entry και exit
-                if (long_entry and long_exit) or (short_entry and short_exit):
-                    print(f"Conflicting signals for {contract_symbol}. No action taken.")
-                    # continue
-                    self.alert_active[contract_symbol] = False
-                    return
-
-                # Έλεγχος για ταυτόχρονα Long και Short Entry
-                if long_entry and short_entry:
-                    print(
-                        f"Both Long Entry and Short Entry signals present for {contract_symbol}. No action taken.")
-                    # continue
-                    self.alert_active[contract_symbol] = False
-                    return
-
-                # Διαχείριση long entry signals
-                if long_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
-                    signals.append((contract_symbol, 'long', i, previous_close, timestamp))
-                    print(f"Long entry signal detected: {signals[-1]}")
-                    self.alert_active[contract_symbol] = True
-                    # break
-
-                # Διαχείριση short entry signals
-                if short_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
-                    signals.append((contract_symbol, 'short', i, previous_close, timestamp))
-                    print(f"Short entry signal detected: {signals[-1]}")
-                    self.alert_active[contract_symbol] = True
-                    # break
-
-                # Διαχείριση long exit signals
-                if long_exit and self.positions[contract_symbol]['in_long_position']:
-                    signals.append((contract_symbol, 'exit_long', i, previous_close, timestamp))
-                    print(f"Long exit signal detected: {signals[-1]}")
-                    self.alert_active[contract_symbol] = True
-                    # break
-
-                # Διαχείριση short exit signals
-                if short_exit and self.positions[contract_symbol]['in_short_position']:
-                    signals.append((contract_symbol, 'exit_short', i, previous_close, timestamp))
-                    print(f"Short exit signal detected: {signals[-1]}")
-                    self.alert_active[contract_symbol] = True
-                    # break
-
-            except KeyError as e:
-                print(f"KeyError at index {i}: {e}, skipping this index.")
+            # Έλεγχος για αντικρουόμενα σήματα entry και exit
+            if (long_entry and long_exit) or (short_entry and short_exit):
+                print(f"Conflicting signals for {contract_symbol}. No action taken.")
                 # continue
-            except Exception as e:
-                print(f"Unexpected error at index {i}: {e}, skipping this index.")
-                # continue
-
-            # Αν υπάρχουν signals, τα στέλνουμε στην ουρά
-            if signals:
-                print(f"Signals to be added to queue: {signals}")
-                for signal in signals:
-                    decision_queue.put(signal)
-                    print(f"Signal added to queue: {signal}")
-                    decision_flag.wait()
-                    decision_flag.set()
-                decision_flag.clear()
                 self.alert_active[contract_symbol] = False
-            else:
-                print(f"No signals found for {contract_symbol}")
+                return
+
+            # Έλεγχος για ταυτόχρονα Long και Short Entry
+            if long_entry and short_entry:
+                print(
+                    f"Both Long Entry and Short Entry signals present for {contract_symbol}. No action taken.")
+                # continue
+                self.alert_active[contract_symbol] = False
+                return
+
+            # Διαχείριση long entry signals
+            if long_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
+                signals.append((contract_symbol, 'long', i, previous_close, timestamp))
+                print(f"Long entry signal detected: {signals[-1]}")
+                self.alert_active[contract_symbol] = True
+                # break
+
+            # Διαχείριση short entry signals
+            if short_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
+                signals.append((contract_symbol, 'short', i, previous_close, timestamp))
+                print(f"Short entry signal detected: {signals[-1]}")
+                self.alert_active[contract_symbol] = True
+                # break
+
+            # Διαχείριση long exit signals
+            if long_exit and self.positions[contract_symbol]['in_long_position']:
+                signals.append((contract_symbol, 'exit_long', i, previous_close, timestamp))
+                print(f"Long exit signal detected: {signals[-1]}")
+                self.alert_active[contract_symbol] = True
+                # break
+
+            # Διαχείριση short exit signals
+            if short_exit and self.positions[contract_symbol]['in_short_position']:
+                signals.append((contract_symbol, 'exit_short', i, previous_close, timestamp))
+                print(f"Short exit signal detected: {signals[-1]}")
+                self.alert_active[contract_symbol] = True
+                # break
+
+        except KeyError as e:
+            print(f"KeyError at index {i}: {e}, skipping this index.")
+            # continue
+        except Exception as e:
+            print(f"Unexpected error at index {i}: {e}, skipping this index.")
+            # continue
+
+        # Αν υπάρχουν signals, τα στέλνουμε στην ουρά
+        if signals:
+            print(f"Signals to be added to queue: {signals}")
+            for signal in signals:
+                decision_queue.put(signal)
+                print(f"Signal added to queue: {signal}")
+                # decision_flag.wait()
+                decision_flag.set()
+            decision_flag.clear()
+            self.alert_active[contract_symbol] = False
+        else:
+            print(f"No signals found for {contract_symbol}")
 
     def handle_decision(self, app, decision_queue, decision_flag):
         print("Handle Decision running...")
@@ -260,158 +259,164 @@ class OrderManager:
             #     print("Stop flag detected in decision thread. Exiting.")
             #     break
 
-            with self.lock:
-                try:
-                    print("Waiting for signal from queue...")
-                    signal = decision_queue.get(timeout=30)
-                    print(f"Signal received from queue: {signal}")
+            # with self.lock:
+            try:
+                print("Waiting for signal from queue...")
+                # signal = decision_queue.get(timeout=120)
+                signal = decision_queue.get()
+                print(f"Signal received from queue: {signal}")
 
-                    # self.wait_for_market_time()
+                # self.wait_for_market_time()
 
-                    contract_symbol, action, index, close_price, timestamp = signal
-                    print(f"Handling decision: {signal}")
+                contract_symbol, action, index, close_price, timestamp = signal
+                print(f"Handling decision: {signal}")
 
-                    contract = next((c['contract'] for c in app.contracts if c['contract'].symbol == contract_symbol), None)
-                    if contract is None:
-                        print(f"Contract not found for symbol: {contract_symbol}")
-                        continue
+                contract = next((c['contract'] for c in app.contracts if c['contract'].symbol == contract_symbol), None)
+                if contract is None:
+                    print(f"Contract not found for symbol: {contract_symbol}")
+                    continue
 
-                    while app.nextValidOrderId is None:
-                        print("Waiting for next valid order ID...")
-                        sleep(1)
-                    print(f"Next valid order ID is {app.nextValidOrderId}")
+                while app.nextValidOrderId is None:
+                    print("Waiting for next valid order ID...")
+                    sleep(1)
+                print(f"Next valid order ID is {app.nextValidOrderId}")
 
-                    outside_rth = self.place_orders_outside_rth
+                outside_rth = self.place_orders_outside_rth
 
-                    if action == 'long':
-                        print(f"Initializing contract for long position: {contract_symbol}")
-                        self.initialize_contract(contract_symbol)
-                        print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+                if action == 'long':
+                    print(f"Initializing contract for long position: {contract_symbol}")
+                    self.initialize_contract(contract_symbol)
+                    print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
 
+                    quantity = 100
+                    limit_price = close_price - (30 / quantity)
+                    profit_target_price = close_price + (100 / quantity)
+                    stop_loss_price = close_price - (61 / quantity)
+
+                    # orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
+                    #                                  stop_loss_price,
+                    #                                  outside_rth=outside_rth)
+                    # if orders:
+                    #     print(f"Orders placed for {contract_symbol}: {orders}")
+                    #     self.positions[contract_symbol]['in_long_position'] = True
+                    #     self.positions[contract_symbol]['in_short_position'] = False
+                    #     self.positions[contract_symbol]['order_id'] = app.nextValidOrderId
+                    #     self.positions[contract_symbol]['status'] = 'Pre-Submitted'
+                    #     print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                    #     self.display_positions()
+                    # else:
+                    #     print(f"Failed to place orders for {contract_symbol}.")
+
+                    orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
+                                                     stop_loss_price,
+                                                     outside_rth=outside_rth)
+                    if orders:
+                        print(f"Orders placed for {contract_symbol}: {orders}")
+                        # Only update the position and order ID after a successful placement and increment the order ID
+                        self.positions[contract_symbol]['in_long_position'] = True
+                        self.positions[contract_symbol]['in_short_position'] = False
+                        self.positions[contract_symbol]['order_id'] = orders[
+                            0].orderId  # Ensure the correct order ID is assigned
+                        sleep(2)
+                        # self.positions[contract_symbol]['status'] = 'PreSubmitted'
+                        print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                        self.display_positions()
+                    else:
+                        print(f"Failed to place orders for {contract_symbol}.")
+                        self.alert_active[contract_symbol] = False
+
+                elif action == 'short':
+                    print(f"Initializing contract for short position: {contract_symbol}")
+                    self.initialize_contract(contract_symbol)
+                    print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+
+                    quantity = 100
+                    limit_price = close_price + (30 / quantity)
+                    profit_target_price = limit_price - (100 / quantity)
+                    stop_loss_price = close_price + (61 / quantity)
+
+                    orders = app.place_bracket_order(contract, "SELL", quantity, limit_price, profit_target_price,
+                                                     stop_loss_price, outside_rth=outside_rth)
+                    if orders:
+                        print(f"Orders placed for {contract_symbol}: {orders}")
+                        # Assign the correct order ID from the orders response instead of relying on app.nextValidOrderId
+                        self.positions[contract_symbol]['in_short_position'] = True
+                        self.positions[contract_symbol]['in_long_position'] = False
+                        self.positions[contract_symbol]['order_id'] = orders[
+                            0].orderId  # Ensuring the correct order ID is assigned from the first order
+                        sleep(2)
+                        # self.positions[contract_symbol]['status'] = 'PreSubmitted'
+                        print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                        self.display_positions()
+                    else:
+                        print(f"Failed to place orders for {contract_symbol}.")
+                        self.alert_active[contract_symbol] = False
+                elif action == 'exit_long':
+                    print(f"{contract_symbol} - Long Exit detected. Closing open BUY position...")
+                    self.initialize_contract(contract_symbol)
+                    position_to_close = self.positions[contract_symbol]
+                    if position_to_close['in_long_position']:
+                        close_order_id = app.nextValidOrderId
                         quantity = 100
-                        limit_price = close_price - (30 / quantity)
-                        profit_target_price = close_price + (100 / quantity)
-                        stop_loss_price = close_price - (61 / quantity)
-
-                        # orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
-                        #                                  stop_loss_price,
-                        #                                  outside_rth=outside_rth)
-                        # if orders:
-                        #     print(f"Orders placed for {contract_symbol}: {orders}")
-                        #     self.positions[contract_symbol]['in_long_position'] = True
-                        #     self.positions[contract_symbol]['in_short_position'] = False
-                        #     self.positions[contract_symbol]['order_id'] = app.nextValidOrderId
-                        #     self.positions[contract_symbol]['status'] = 'Pre-Submitted'
-                        #     print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
-                        #     self.display_positions()
-                        # else:
-                        #     print(f"Failed to place orders for {contract_symbol}.")
-
-                        orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
-                                                         stop_loss_price,
-                                                         outside_rth=outside_rth)
-                        if orders:
-                            print(f"Orders placed for {contract_symbol}: {orders}")
-                            # Only update the position and order ID after a successful placement and increment the order ID
-                            self.positions[contract_symbol]['in_long_position'] = True
-                            self.positions[contract_symbol]['in_short_position'] = False
-                            self.positions[contract_symbol]['order_id'] = orders[
-                                0].orderId  # Ensure the correct order ID is assigned
-                            # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                            print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
-                            self.display_positions()
-                        else:
-                            print(f"Failed to place orders for {contract_symbol}.")
-                            self.alert_active[contract_symbol] = False
-
-                    elif action == 'short':
-                        print(f"Initializing contract for short position: {contract_symbol}")
-                        self.initialize_contract(contract_symbol)
-                        print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
-
-                        quantity = 100
-                        limit_price = close_price + (30 / quantity)
-                        profit_target_price = limit_price - (100 / quantity)
-                        stop_loss_price = close_price + (61 / quantity)
+                        limit_price = close_price
+                        profit_target_price = close_price - (100 / quantity)
+                        stop_loss_price = close_price + (30 / quantity)
 
                         orders = app.place_bracket_order(contract, "SELL", quantity, limit_price, profit_target_price,
                                                          stop_loss_price, outside_rth=outside_rth)
                         if orders:
-                            print(f"Orders placed for {contract_symbol}: {orders}")
-                            # Assign the correct order ID from the orders response instead of relying on app.nextValidOrderId
-                            self.positions[contract_symbol]['in_short_position'] = True
-                            self.positions[contract_symbol]['in_long_position'] = False
-                            self.positions[contract_symbol]['order_id'] = orders[
-                                0].orderId  # Ensuring the correct order ID is assigned from the first order
+                            print(f"Orders placed to close position for {contract_symbol}: {orders}")
+                            # Τοποθετούμε το position ως "Pre-Submitted" και θα ενημερωθεί με το status όταν γίνει filled
                             # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                            print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
-                            self.display_positions()
+                            self.positions[contract_symbol]['in_long_position'] = False
+                            sleep(2)
                         else:
-                            print(f"Failed to place orders for {contract_symbol}.")
+                            print(f"Failed to place exit orders for {contract_symbol}.")
                             self.alert_active[contract_symbol] = False
-                    elif action == 'exit_long':
-                        print(f"{contract_symbol} - Long Exit detected. Closing open BUY position...")
-                        self.initialize_contract(contract_symbol)
-                        position_to_close = self.positions[contract_symbol]
-                        if position_to_close['in_long_position']:
-                            close_order_id = app.nextValidOrderId
-                            quantity = 100
-                            limit_price = close_price
-                            profit_target_price = close_price - (100 / quantity)
-                            stop_loss_price = close_price + (30 / quantity)
 
-                            orders = app.place_bracket_order(contract, "SELL", quantity, limit_price, profit_target_price,
-                                                             stop_loss_price, outside_rth=outside_rth)
-                            if orders:
-                                print(f"Orders placed to close position for {contract_symbol}: {orders}")
-                                # Τοποθετούμε το position ως "Pre-Submitted" και θα ενημερωθεί με το status όταν γίνει filled
-                                # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                                self.positions[contract_symbol]['in_long_position'] = False
-                            else:
-                                print(f"Failed to place exit orders for {contract_symbol}.")
-                                self.alert_active[contract_symbol] = False
+                elif action == 'exit_short':
+                    print(f"{contract_symbol} - Short Exit detected. Closing open SELL position...")
+                    self.initialize_contract(contract_symbol)
+                    position_to_close = self.positions[contract_symbol]
+                    if position_to_close['in_short_position']:
+                        close_order_id = app.nextValidOrderId
+                        quantity = 100
+                        limit_price = close_price
+                        profit_target_price = close_price + (100 / quantity)
+                        stop_loss_price = close_price - (30 / quantity)
 
-                    elif action == 'exit_short':
-                        print(f"{contract_symbol} - Short Exit detected. Closing open SELL position...")
-                        self.initialize_contract(contract_symbol)
-                        position_to_close = self.positions[contract_symbol]
-                        if position_to_close['in_short_position']:
-                            close_order_id = app.nextValidOrderId
-                            quantity = 100
-                            limit_price = close_price
-                            profit_target_price = close_price + (100 / quantity)
-                            stop_loss_price = close_price - (30 / quantity)
+                        # Δημιουργούμε εντολή αγοράς για να κλείσει η short θέση
+                        orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
+                                                         stop_loss_price, outside_rth=outside_rth)
+                        if orders:
+                            print(f"Orders placed to close short position for {contract_symbol}: {orders}")
+                            # Τοποθετούμε το position ως "Pre-Submitted" και θα ενημερωθεί με το status όταν γίνει filled
+                            # self.positions[contract_symbol]['status'] = 'PreSubmitted'
+                            self.positions[contract_symbol]['in_short_position'] = False
+                            sleep(2)
+                        else:
+                            print(f"Failed to place exit orders for {contract_symbol}.")
+                            self.alert_active[contract_symbol] = False
+                decision_flag.set()
 
-                            # Δημιουργούμε εντολή αγοράς για να κλείσει η short θέση
-                            orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
-                                                             stop_loss_price, outside_rth=outside_rth)
-                            if orders:
-                                print(f"Orders placed to close short position for {contract_symbol}: {orders}")
-                                # Τοποθετούμε το position ως "Pre-Submitted" και θα ενημερωθεί με το status όταν γίνει filled
-                                # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                                self.positions[contract_symbol]['in_short_position'] = False
-                            else:
-                                print(f"Failed to place exit orders for {contract_symbol}.")
-                                self.alert_active[contract_symbol] = False
-                    decision_flag.set()
-
-                except Empty:
-                    print("Timeout waiting for signal from queue. No signals received.")
-                    # Αν θέλεις, μπορείς να προσθέσεις κάτι εδώ για να διαχειριστείς την αναμονή χωρίς σήματα
-                    continue
-                except Exception as e:
-                    print(f"An unexpected error occurred: {str(e)}")
-                    continue
+            except Empty:
+                print("Timeout waiting for signal from queue. No signals received.")
+                # Αν θέλεις, μπορείς να προσθέσεις κάτι εδώ για να διαχειριστείς την αναμονή χωρίς σήματα
+                continue
+            except Exception as e:
+                print(f"An unexpected error occurred: {str(e)}")
+                continue
 
     def wait_for_market_time(self):
         est = pytz.timezone('America/New_York')
         now = datetime.now(est)
         market_open_time = datetime(now.year, now.month, now.day, 9, 30, tzinfo=est)  # 9:30 PM EST is market open time
-        five_minutes_after_open = market_open_time + timedelta(minutes=10)
+        ten_minutes_after_open = market_open_time + timedelta(minutes=10)
 
-        if now < five_minutes_after_open:
-            wait_seconds = (five_minutes_after_open - now).total_seconds()
-            print(f"Waiting for {wait_seconds} seconds until 5 minutes after market open...")
+        if now < market_open_time:
+            wait_seconds = (ten_minutes_after_open - now).total_seconds()
+            wait_minutes = wait_seconds / 60
+            print(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
             sleep(wait_seconds)
 
     # def handle_order_execution(self, orderId, status):
@@ -460,41 +465,41 @@ class OrderManager:
     #             break  # Σταματάμε τον έλεγχο γιατί βρήκαμε το αντίστοιχο position
 
     def handle_order_execution(self, orderId, status):
-        with self.lock:
+        # with self.lock:
             # Ελέγχουμε αν το order συνδέεται με κάποιο position
-            for contract_symbol, position in self.positions.items():
-                if position['order_id'] == orderId:
-                    print(f"Processing order {orderId} for {contract_symbol} with status: {status}")
+        for contract_symbol, position in self.positions.items():
+            if position['order_id'] == orderId:
+                print(f"Processing order {orderId} for {contract_symbol} with status: {status}")
 
-                    # if status in ['PreSubmitted', 'PendingSubmit']:
-                    #     # Αν το status είναι Pre-Submitted ή Submitted, κρατάμε την θέση ανοιχτή
-                    #     self.positions[contract_symbol]['status'] = 'Locked'
-                    #     print(f"Order {orderId} for {contract_symbol} is still in {status}. Position locked.")
-                    # elif status in ['Submitted']:
-                    #     self.positions[contract_symbol]['status'] = 'Open'
-                    #     print(f"Order {orderId} for {contract_symbol} is still in {status}. Position open.")
+                # if status in ['PreSubmitted', 'PendingSubmit']:
+                #     # Αν το status είναι Pre-Submitted ή Submitted, κρατάμε την θέση ανοιχτή
+                #     self.positions[contract_symbol]['status'] = 'Locked'
+                #     print(f"Order {orderId} for {contract_symbol} is still in {status}. Position locked.")
+                # elif status in ['Submitted']:
+                #     self.positions[contract_symbol]['status'] = 'Open'
+                #     print(f"Order {orderId} for {contract_symbol} is still in {status}. Position open.")
 
-                    if status in ['PreSubmitted', 'PendingSubmit', 'Submitted']:
-                        # Καθορισμός της θέσης ως ανοιχτή (αμέσως μόλις η εντολή τοποθετείται)
-                        if 'BUY' in orderId:
-                            self.positions[contract_symbol]['in_long_position'] = True
-                            self.positions[contract_symbol]['in_short_position'] = False
-                        elif 'SELL' in orderId:
-                            self.positions[contract_symbol]['in_short_position'] = True
-                            self.positions[contract_symbol]['in_long_position'] = False
-
-                        self.positions[contract_symbol]['status'] = 'Locked' if status in ['PreSubmitted',
-                                                                                           'PendingSubmit'] else 'Open'
-                        print(f"Order {orderId} for {contract_symbol} is still in {status}. Position locked/open.")
-
-                    elif status in ['Filled', 'Cancelled', 'Ιnactive']:
-                        self.positions[contract_symbol]['status'] = 'Closed'
-                        self.positions[contract_symbol]['in_long_position'] = False
+                if status in ['PreSubmitted', 'PendingSubmit', 'Submitted']:
+                    # Καθορισμός της θέσης ως ανοιχτή (αμέσως μόλις η εντολή τοποθετείται)
+                    if 'BUY' in orderId:
+                        self.positions[contract_symbol]['in_long_position'] = True
                         self.positions[contract_symbol]['in_short_position'] = False
-                        self.positions[contract_symbol]['order_id'] = None
-                        self.alert_active[contract_symbol] = False
-                        print(f"Order {orderId} for {contract_symbol} is {status}. Position closed.")
-                    break
+                    elif 'SELL' in orderId:
+                        self.positions[contract_symbol]['in_short_position'] = True
+                        self.positions[contract_symbol]['in_long_position'] = False
+
+                    self.positions[contract_symbol]['status'] = 'Locked' if status in ['PreSubmitted',
+                                                                                       'PendingSubmit'] else 'Open'
+                    print(f"Order {orderId} for {contract_symbol} is still in {status}. Position locked/open.")
+
+                elif status in ['Filled', 'Cancelled', 'Ιnactive']:
+                    self.positions[contract_symbol]['status'] = 'Closed'
+                    self.positions[contract_symbol]['in_long_position'] = False
+                    self.positions[contract_symbol]['in_short_position'] = False
+                    self.positions[contract_symbol]['order_id'] = None
+                    self.alert_active[contract_symbol] = False
+                    print(f"Order {orderId} for {contract_symbol} is {status}. Position closed.")
+                break
 
     def display_positions(self):
         print("\n--- Positions List ---")

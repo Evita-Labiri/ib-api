@@ -240,32 +240,31 @@ def run_order_script():
 
     print("Decision thread start")
     decision_thread = threading.Thread(target=order_manager.handle_decision,
-                                       args=(app, decision_queue, stop_flag))
+                                       args=(app, decision_queue, decision_flag))
     decision_thread.start()
 
     try:
-        while True:          #not stop_flag.is_set():
+        while not stop_flag.is_set():     # True:          #:
             # print("Running order management...")
             print(f"Running order management... (stop_flag: {stop_flag.is_set()})")
-            time.sleep(20)  # Μικρή καθυστέρηση για την αποφυγή υπερβολικής χρήσης CPU
+            time.sleep(10)  # Μικρή καθυστέρηση για την αποφυγή υπερβολικής χρήσης CPU
             if stop_flag.is_set():
                 print("Stop flag detected. Exiting main loop.")
 
             print(f"Decision thread status: {decision_thread.is_alive()}")
             print(f"Main thread status: {main_thread.is_alive()}")
-
     except KeyboardInterrupt:
         print("Interrupted by user, closing connection...")
-    # finally:
-    #     print("Finally clause activated")
-    #     app.close_connection()
-    #     stop_flag.set()
-    #     decision_flag.set()
-    #     decision_thread.join()
-    #     esc_listener_thread.join()
-    #     main_thread.join()
-    #     print("All threads have been terminated.")
-    print("Order script stopped after 2 hours.")
+    finally:
+        print("Finally clause activated")
+        app.close_connection()
+        stop_flag.set()
+        decision_flag.set()
+        decision_thread.join()
+        esc_listener_thread.join()
+        main_thread.join()
+        print("All threads have been terminated.")
+    # print("Order script stopped after 2 hours.")
 
 #         gia close me kleisti agora prepei na nai limit order kai fill outside reg hours
 
