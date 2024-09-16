@@ -10,7 +10,7 @@ from ibapi.contract import Contract
 from ibapi.order import Order
 import threading
 
-from globals import stop_flag
+# from globals import stop_flag
 from order_manager import OrderManager
 
 class IBApi(EClient, EWrapper):
@@ -34,6 +34,7 @@ class IBApi(EClient, EWrapper):
         self.current_reqId = 1
         self.reqId_info = {}
 
+
     def set_ticker(self, ticker):
         self.ticker = ticker
 
@@ -47,8 +48,22 @@ class IBApi(EClient, EWrapper):
 
     def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId,
                     whyHeld, mktCapPrice):
-        print(
-            f"Order Status - orderId: {orderId}, status: {status}, filled: {filled}, remaining: {remaining}, avgFillPrice: {avgFillPrice}")
+
+        # for contract_symbol, position in self.order_manager.positions.items():
+        #     if position['order_id'] == orderId:
+        #         self.order_manager.positions[contract_symbol]['status'] = status  # Ορίζουμε το status από την πλατφόρμα
+        #         print(f"Updated status for {contract_symbol}: {status}")
+        #         break
+
+        print(f"Order Status: {orderId}, Status: {status}")
+        if status in ['PreSubmitted', 'Submitted']:
+            print(f"Order {orderId} has been successfully placed with status: {status}")
+        elif status == 'Filled':
+            print(f"Order {orderId} has been filled.")
+        elif status in ['Cancelled', 'Inactive']:
+            print(f"Order {orderId} failed with status: {status}")
+        else:
+            print(f"Order {orderId} is in an unknown state: {status}")
 
         self.order_manager.handle_order_execution(orderId, status)
 
@@ -228,6 +243,16 @@ class IBApi(EClient, EWrapper):
             minutes = duration.seconds // 60
             return f"{minutes} M"
 
+    def check_connection(self):
+        if not self.isConnected():  # Έλεγχος αν το API είναι συνδεδεμένο
+            print("API disconnected, attempting to reconnect...")
+            self.connect("127.0.0.1", 7497, 1)
+            if self.isConnected():
+                print("Reconnected to API.")
+            else:
+                print("Failed to reconnect, setting stop_flag.")
+                # stop_flag.set()
+
     def tickPrice(self, reqId, tickType, price, attrib):
         print(f"Tick Price for reqId {reqId}: {price}")
 
@@ -358,18 +383,33 @@ class IBApi(EClient, EWrapper):
         return [parent, take_profit, stop_loss]
 
     def place_bracket_order(self, contract, action, quantity, limit_price, profit_target, stop_loss, outside_rth=False):
-        bracket = self.create_bracket_order(self.nextValidOrderId, action, quantity, limit_price, profit_target,
-                                                stop_loss, outside_rth)
+        order_lock = threading.Lock()
+        with order_lock:  # Χρήση του κλειδώματος
 
-        # Store the order IDs
-        self.entry_order_id = bracket[0].orderId
-        self.profit_taker_order_id = bracket[1].orderId
-        self.stop_loss_order_id = bracket[2].orderId
+            try:
+                # retries = 3  # Μέγιστος αριθμός προσπαθειών
+                # delay = 2  # Χρόνος αναμονής (δευτερόλεπτα) μεταξύ προσπαθειών
 
-        for o in bracket:
-            self.placeOrder(o.orderId, contract, o)
-            print(f"Placed order: {o.orderId} for contract: {contract.symbol}")
-            self.nextValidOrderId += 1
+                bracket = self.create_bracket_order(self.nextValidOrderId, action, quantity, limit_price, profit_target,
+                                                        stop_loss, outside_rth)
+
+                # Store the order IDs
+                self.entry_order_id = bracket[0].orderId
+                self.profit_taker_order_id = bracket[1].orderId
+                self.stop_loss_order_id = bracket[2].orderId
+
+                for o in bracket:
+                    if not self.check_connection():
+                        print("API disconnected before placing order. Attempting to reconnect.")
+                    self.placeOrder(o.orderId, contract, o)
+                    print(f"Placed order: {o.orderId} for contract: {contract.symbol}")
+                    self.nextValidOrderId += 1
+                    sleep(0.5)
+
+                return bracket
+            except Exception as e:
+                print(f"Error placing bracket order: {str(e)}")
+                return None
 
     def cancel_open_order(self, order_id):
         print(f"Cancelling order ID: {order_id}")
@@ -466,6 +506,7 @@ class IBApi(EClient, EWrapper):
                     print(f"Contract for reqId {contract_dict['reqId']} is not set.")
 
             if combined_data_dict:
+                print(f"Combined data dictionary: {combined_data_dict}")
                 for symbol, data in combined_data_dict.items():
                     if isinstance(data['entry'], pd.DataFrame) and isinstance(data['exit'], pd.DataFrame):
                         if not data['entry'].empty and not data['exit'].empty:
@@ -482,7 +523,7 @@ class IBApi(EClient, EWrapper):
                 print("No data to process signals.")
 
             try:
-                signal = decision_queue.get(timeout=5)  # Αν δεν υπάρχει signal μέσα σε 5 δευτερόλεπτα, συνέχισε
+                decision_queue.get(timeout=10)  # Αν δεν υπάρχει signal μέσα σε 5 δευτερόλεπτα, συνέχισε
                 print("Decision queue is not empty, handling decision")
                 # order_manager.handle_decision(self, signal, stop_flag)   # Εδώ θα χειριστείτε το signal
             except queue.Empty:

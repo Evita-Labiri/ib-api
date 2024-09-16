@@ -66,14 +66,16 @@ class DataProcessor:
         # Initialize the signals columns
         entry_long_criteria = [
             'EMA9_above_EMA20_long', 'EMA9_and_EMA20_above_EMA200_long',
-            'Close_above_VWAP_long', 'MACD_above_Signal_long', 'MACD_above_zero_long',
+            'Close_above_VWAP_long', 'MACD_above_Signal_long'
+        # , 'MACD_above_zero_long',
         ]
         # 'Price_crossed_above_BB_Lower_long'
 
         entry_short_criteria = [
             'EMA9_below_EMA20_short', 'EMA9_and_EMA20_below_EMA200_short',
-            'Close_below_VWAP_short', 'MACD_below_Signal_short', 'MACD_below_zero_short',
-            'Price_crossed_below_BB_Upper_short'
+            'Close_below_VWAP_short', 'MACD_below_Signal_short'
+
+        #, 'MACD_below_zero_short', 'Price_crossed_below_BB_Upper_short'
         ]
 
         exit_long_criteria = [
@@ -121,9 +123,9 @@ class DataProcessor:
                     df.at[i, 'Close_above_VWAP_long'] = True
                 if df['MACD'].iloc[i - 1] > df['MACD_Signal'].iloc[i - 1] and df['MACD'].iloc[i - 1] > df['MACD_Signal'].iloc[i - 2]:
                     df.at[i, 'MACD_above_Signal_long'] = True
-                # tha prepei na isxysoyn kai ta 3 prohgoymena gia na mpoyme se order
-                if df['MACD'].iloc[i - 1] > 0 and df['MACD'].iloc[i - 2] > 0:
-                    df.at[i, 'MACD_above_zero_long'] = True
+                # tha prepei na isxysoyn kai ta 4 prohgoymena gia na mpoyme se order
+                # if df['MACD'].iloc[i - 1] > 0 and df['MACD'].iloc[i - 2] > 0:
+                #     df.at[i, 'MACD_above_zero_long'] = True
                 # if df['Close'].iloc[i - 1] < df['BB_Lower'].iloc[i - 1] and df['Close'].iloc[i - 2] >= df['BB_Lower'].iloc[
                 #     i - 2]:
                 #     df.at[i, 'Price_crossed_above_BB_Lower_long'] = True
@@ -133,18 +135,29 @@ class DataProcessor:
                 #     self.data_in_long_position = True
                 #     self.order_manager.open_long_position()
 
-                all_the_criteria_long = (
-                        df['EMA9_above_EMA20_long'].iloc[i] == True and
-                        df['EMA9_and_EMA20_above_EMA200_long'].iloc[i] == True and
-                        df['Close_above_VWAP_long'].iloc[i] == True and
-                        df['MACD_above_Signal_long'] == True and
-                        df['MACD_above_zero_long'] == True
+                # first_four_criteria_long = (
+                #         df['EMA9_above_EMA20_long'].iloc[i] == True and
+                #         df['EMA9_and_EMA20_above_EMA200_long'].iloc[i] == True and
+                #         df['Close_above_VWAP_long'].iloc[i] == True and
+                #         df['MACD_above_Signal_long'] == True
+                # )
+
+                first_four_criteria_long = (
+                        df.at[i, 'EMA9_above_EMA20_long'] and
+                        df.at[i, 'EMA9_and_EMA20_above_EMA200_long'] and
+                        df.at[i, 'Close_above_VWAP_long'] and
+                        df.at[i, 'MACD_above_Signal_long']
                 )
 
-                if all_the_criteria_long or df['MACD_above_zero_long'].iloc[i] == True:
+                if first_four_criteria_long :   #or df['MACD_above_zero_long'].iloc[i] == True
                     df.at[i, 'Long_Entry'] = True
                     self.data_in_long_position = True
                     self.order_manager.open_long_position()
+
+                # For testing reasons
+                if any(df.loc[i, entry_long_criteria]):
+                    df.at[i, 'Long_Entry'] = True
+                    self.order_manager.close_long_position()
 
                 # Short Entry Criteria
                 if df['EMA9'].iloc[i - 1] < df['EMA20'].iloc[i - 1] and df['EMA9'].iloc[i - 1] < df['EMA20'].iloc[i - 2]:
@@ -158,8 +171,8 @@ class DataProcessor:
                     df.at[i, 'Close_below_VWAP_short'] = True
                 if df['MACD'].iloc[i - 1] < df['MACD_Signal'].iloc[i - 1] and df['MACD'].iloc[i - 1] < df['MACD_Signal'].iloc[i - 2]:
                     df.at[i, 'MACD_below_Signal_short'] = True
-                if df['MACD'].iloc[i - 1] < 0 and df['MACD'].iloc[i - 2] < 0:
-                    df.at[i, 'MACD_below_zero_short'] = True
+                # if df['MACD'].iloc[i - 1] < 0 and df['MACD'].iloc[i - 2] < 0:
+                #     df.at[i, 'MACD_below_zero_short'] = True
                 # if df['Close'].iloc[i - 1] > df['BB_Upper'].iloc[i - 1] and df['Close'].iloc[i - 2] <= df['BB_Upper'].iloc[
                 #     i - 2]:
                 #     df.at[i, 'Price_crossed_below_BB_Upper_short'] = True
@@ -168,20 +181,30 @@ class DataProcessor:
                 #     df.at[i, 'Short_Entry'] = True
                 #     self.data_in_short_position = True
                 #     self.order_manager.open_short_position()
+                #
+                # first_four_criteria_short = (
+                #         df[].iloc[i] == True and
+                #         df[].iloc[i] == True and
+                #         df[].iloc[i] == True and
+                #         df[] == True
+                # )
 
-                all_the_criteria_short = (
-                        df['EMA9_below_EMA20_short'].iloc[i] == True and
-                        df['EMA9_and_EMA20_below_EMA200_short'].iloc[i] == True and
-                        df['Close_below_VWAP_short'].iloc[i] == True and
-                        df['MACD_below_Signal_short'] == True and
-                        df['MACD_below_zero_short'] == True
+                first_four_criteria_short = (
+                        df.at[i, 'EMA9_below_EMA20_short'] and
+                        df.at[i, 'EMA9_and_EMA20_below_EMA200_short'] and
+                        df.at[i, 'Close_below_VWAP_short'] and
+                        df.at[i, 'MACD_below_Signal_short']
                 )
 
-                # Εάν τα τρία πρώτα κριτήρια ή το MACD < 0, εκτελείται η εντολή
-                if all_the_criteria_short or df['MACD_below_zero_short'].iloc[i] == True:
+                if first_four_criteria_short:   # or df['MACD_below_zero_short'].iloc[i] == True
                     df.at[i, 'Short_Entry'] = True
                     self.data_in_short_position = True
                     self.order_manager.open_short_position()
+
+                # # For testing reasons
+                # if any(df.loc[i, entry_short_criteria]):
+                #     df.at[i, 'Short_Entry'] = True
+                #     self.order_manager.close_short_position()
 
                 # Long Exit Criteria
                 if self.data_in_long_position:
@@ -355,30 +378,46 @@ class DataProcessor:
             print('Combined Data')
             print(combined_data.tail())
 
+            print("Df_entry resampling")
             df_entry = self.resample_data(combined_data, interval_entry)
+            print(df_entry.tail())
+            print("Df_entry indicators")
             df_entry = self.calculate_indicators(df_entry)
+            print(df_entry.tail())
 
-            # Resample and process for exit signals
+        # Resample and process for exit signals
+            print("Df_exit resampling")
             df_exit = self.resample_data(combined_data, interval_exit)
+            print(df_exit.tail())
+            print("Df_exit indicators")
             df_exit = self.calculate_indicators(df_exit)
+            print(df_exit.tail())
 
             # Generate signals for entry and exit
+            print("Df_entry signals")
             df_entry = self.generate_signals(df_entry)
+            print(df_entry.tail())
+            print("Df_exit indicators")
             df_exit = self.generate_signals(df_exit)
+            print(df_exit.tail())
 
             # print(f"Exit {interval_exit} Data with Signals:")
             # print(df_exit.tail())
             #
             # print(f"Entry {interval_entry} Data with Signals:")
             # print(df_entry.tail())
+            # pd.set_option('display.max_rows', 1000)
+            # pd.set_option('display.max_columns', 10)
+            # pd.set_option('display.width', 1000)
+
+        # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
+            print(
+                f"Entry {interval_entry} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
+            print(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
 
             # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_exit
-            print(f"Exit {interval_exit} Data with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
+            print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
             print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
-
-            # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
-            print(f"Entry {interval_entry} Data with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
-            print(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
 
             # Export dataframes to Excel files with different names based on the interval
             self.export_to_excel(df_entry, filename=f"signals_{interval_entry}.xlsx")

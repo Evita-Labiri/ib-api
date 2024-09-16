@@ -1,7 +1,6 @@
 import threading
 import time
-
-from globals import decision_queue, stop_flag
+from globals import decision_queue      #, stop_flag
 from ib_api import IBApi
 from data_processing import DataProcessor
 from database import Database
@@ -235,8 +234,6 @@ def run_order_script():
     # timer.start()
 
     print("Following main thread: ")
-    # main_thread = threading.Thread(target=app.order_main_thread_function,
-    #                                args=(data_processor, interval, app.contracts, order_manager, decision_queue, decision_flag))
     main_thread = threading.Thread(target=app.order_main_thread_function, args=(
         data_processor, interval_entry, interval_exit, app.contracts, order_manager, decision_queue, decision_flag))
     main_thread.start()
@@ -247,23 +244,27 @@ def run_order_script():
     decision_thread.start()
 
     try:
-        while not stop_flag.is_set():
-            print("Running order management...")
-            time.sleep(5)  # Μικρή καθυστέρηση για την αποφυγή υπερβολικής χρήσης CPU
+        while True:          #not stop_flag.is_set():
+            # print("Running order management...")
+            print(f"Running order management... (stop_flag: {stop_flag.is_set()})")
+            time.sleep(20)  # Μικρή καθυστέρηση για την αποφυγή υπερβολικής χρήσης CPU
             if stop_flag.is_set():
                 print("Stop flag detected. Exiting main loop.")
 
+            print(f"Decision thread status: {decision_thread.is_alive()}")
+            print(f"Main thread status: {main_thread.is_alive()}")
+
     except KeyboardInterrupt:
         print("Interrupted by user, closing connection...")
-    finally:
-        app.close_connection()
-        stop_flag.set()
-        decision_flag.set()
-        decision_thread.join()
-        esc_listener_thread.join()
-        main_thread.join()
-        print("All threads have been terminated.")
-
+    # finally:
+    #     print("Finally clause activated")
+    #     app.close_connection()
+    #     stop_flag.set()
+    #     decision_flag.set()
+    #     decision_thread.join()
+    #     esc_listener_thread.join()
+    #     main_thread.join()
+    #     print("All threads have been terminated.")
     print("Order script stopped after 2 hours.")
 
 #         gia close me kleisti agora prepei na nai limit order kai fill outside reg hours
