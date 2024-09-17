@@ -361,22 +361,12 @@ class DataProcessor:
 
         ticker = contract.symbol
 
-        # filtered_real_time_data = [row for row in self.real_time_data.get(ticker, [])]
-        #
-        # if filtered_real_time_data and all(
-        #         row[1:] != [None, None, None, None, None] and row[1:] != [0.0, 0.0, 0.0, 0.0, 0.0] for row in
-        #         filtered_real_time_data):
         real_time_df = pd.DataFrame(real_time_data,
                                     columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker'])
         real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
 
         print("Real time df: ")
         print(real_time_df)
-
-        # if ticker in real_time_data and not real_time_df.empty:
-        #     real_time_df = real_time_data[ticker]
-        # else:
-        #     real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
 
         # print("Real-time DataFrame with datetime check:")
         # print(real_time_df.dtypes)
@@ -393,17 +383,15 @@ class DataProcessor:
             print("Column 'Date' is missing, cannot set as index")
             print(real_time_df.columns)
 
-        # real_time_df['Ticker'] = contract.symbol
         print("Valid real-time data found, DataFrame created:")
         print(real_time_df)
-        # else:
-        #     print("All real-time data rows are invalid, creating an empty DataFrame.")
-        #     real_time_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
 
         # Εκτύπωση των real-time δεδομένων για έλεγχο
         # print("Real-time DataFrame before combining:")
         # print(real_time_df.tail())
 
+        # filtered with ticker
+        print("Filtered with ticker")
         real_time_df_filtered = real_time_df[real_time_df['Ticker'] == ticker]
         print(real_time_df_filtered.tail())
 
@@ -413,7 +401,6 @@ class DataProcessor:
         # print(combined_data.tail())
 
         if not combined_data.empty:
-        #     combined_data.reset_index(drop=False, inplace=True)
             if 'Date' in combined_data.columns:
                 combined_data['Date'] = pd.to_datetime(combined_data['Date'], errors='coerce')
 
@@ -452,11 +439,8 @@ class DataProcessor:
             #
             # print(f"Entry {interval_entry} Data with Signals:")
             # print(df_entry.tail())
-            # pd.set_option('display.max_rows', 1000)
-            # pd.set_option('display.max_columns', 10)
-            # pd.set_option('display.width', 1000)
 
-        # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
+            # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
             print(
                 f"Entry {interval_entry} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
             print(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
@@ -465,7 +449,6 @@ class DataProcessor:
             print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
             print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
 
-            # Export dataframes to Excel files with different names based on the interval
             self.export_to_excel(df_entry, filename=f"signals_{interval_entry}.xlsx")
             self.export_to_excel(df_exit, filename=f"signals_{interval_exit}.xlsx")
 
@@ -475,58 +458,10 @@ class DataProcessor:
             print("No data to process.")
             return None
 
-
-        # if not real_time_df.empty:
-        #     print("Real-time data found!")
-        #     real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
-        #     real_time_df.set_index('Date', inplace=True)
-        #     print(real_time_df)
-
-        # dataframes_to_concat = [df for df in [df_minute, real_time_df] if not df.empty and df['Date'].notna().all()]
-        # combined_data = pd.concat(dataframes_to_concat)
-        # print(combined_data)
-        #
-        # if not combined_data.empty:
-        #     if 'Date' in combined_data.columns:
-        #         combined_data['Date'] = pd.to_datetime(combined_data['Date'], errors='coerce')
-        #         combined_data.set_index('Date', inplace=True)
-        #
-        #     df_entry = self.resample_data(combined_data, interval_entry)
-        #     df_entry = self.calculate_indicators(df_entry)
-        #
-        #     df_exit = self.resample_data(combined_data, interval_exit)
-        #     df_exit = self.calculate_indicators(df_exit)
-        #
-        #     df_entry = self.generate_signals(df_entry)
-        #     df_exit = self.generate_signals(df_exit)
-        #
-        #     print(
-        #         f"Entry {interval_entry} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
-        #     print(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
-        #
-        #     print(
-        #         f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
-        #     print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
-        #
-        #     self.export_to_excel(df_entry, filename=f"signals_{interval_entry}.xlsx")
-        #     self.export_to_excel(df_exit, filename=f"signals_{interval_exit}.xlsx")
-        #
-        #     return df_entry, df_exit
-        # else:
-        #     print("No data to process.")
-        #     return None
-
     @staticmethod
     def export_to_excel(df, filename="output.xlsx"):
         # print(f"Exporting to Excel. Data:\n{df.tail()}")
         if 'Date' in df.columns:
             df['Date'] = df['Date'].dt.tz_localize(None)
         df.to_excel(filename, index=False)
-        #
-        # signals_df1 = self.generate_signals(df_stock1)
-        # signals_df2 = self.generate_signals(df_stock2)
-        #
-        # # Αποθήκευση σε διαφορετικά sheets σε Excel
-        # with pd.ExcelWriter('signals_output.xlsx') as writer:
-        #     signals_df1.to_excel(writer, sheet_name='Stock1_Signals', index=False)
-        #     signals_df2.to_excel(writer, sheet_name='Stock2_Signals', index=False)
+

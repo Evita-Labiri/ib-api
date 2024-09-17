@@ -1,4 +1,5 @@
 import threading
+from asyncio import timeout
 from datetime import datetime, time, timedelta
 from queue import Empty
 from time import sleep
@@ -263,7 +264,7 @@ class OrderManager:
             try:
                 print("Waiting for signal from queue...")
                 # signal = decision_queue.get(timeout=120)
-                signal = decision_queue.get()
+                signal = decision_queue.get(timeout=60)
                 print(f"Signal received from queue: {signal}")
 
                 # self.wait_for_market_time()

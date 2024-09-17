@@ -243,10 +243,10 @@ def run_order_script():
     decision_thread.start()
 
     try:
-        while not stop_flag.is_set():     # True:          #:
+        while not stop_flag.is_set():
             # print("Running order management...")
             print(f"Running order management... (stop_flag: {stop_flag.is_set()})")
-            time.sleep(10)  # Μικρή καθυστέρηση για την αποφυγή υπερβολικής χρήσης CPU
+            time.sleep(5)  # Μικρή καθυστέρηση για την αποφυγή υπερβολικής χρήσης CPU
             if stop_flag.is_set():
                 print("Stop flag detected. Exiting main loop.")
 
