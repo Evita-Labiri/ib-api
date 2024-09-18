@@ -16,6 +16,7 @@ from order_manager import OrderManager
 class IBApi(EClient, EWrapper):
     def __init__(self, data_processor, db):
         EClient.__init__(self, wrapper=self)
+        self.data_download_complete = False
         self.nextValidOrderId = None
         self.data = []
         self.real_time_data = {}
@@ -49,12 +50,6 @@ class IBApi(EClient, EWrapper):
     def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId,
                     whyHeld, mktCapPrice):
 
-        # for contract_symbol, position in self.order_manager.positions.items():
-        #     if position['order_id'] == orderId:
-        #         self.order_manager.positions[contract_symbol]['status'] = status  # Ορίζουμε το status από την πλατφόρμα
-        #         print(f"Updated status for {contract_symbol}: {status}")
-        #         break
-
         print(f"Order Status: {orderId}, Status: {status}")
         if status in ['PreSubmitted', 'Submitted']:
             print(f"Order {orderId} has been successfully placed with status: {status}")
@@ -79,28 +74,6 @@ class IBApi(EClient, EWrapper):
         print("Requesting data...")
         print(
             f'Time: {bar.date}, Open: {bar.open}, High: {bar.high}, Low: {bar.low}, Close: {bar.close}, Volume: {bar.volume}')
-        # try:
-        #     ny_tz = pytz.timezone('America/New_York')
-        #     date = None
-        #     if reqId == 1:  # Minute data
-        #         date_str, time_str, tz_str = bar.date.split()
-        #         date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
-        #         date = ny_tz.localize(date).replace(tzinfo=None)
-        #     elif reqId == 2:  # Daily data
-        #         date_str = bar.date
-        #         date = datetime.strptime(date_str, '%Y%m%d')
-        #         date = ny_tz.localize(date).replace(tzinfo=None)
-        #     ticker = self.ticker
-        #     self.data.append([date, bar.open, bar.high, bar.low, bar.close, bar.volume])
-        #     if reqId == 1:
-        #         self.db.insert_data_to_minute_table('minute_data', ticker, date, bar.open, bar.high, bar.low, bar.close,
-        #                                          bar.volume)
-        #     elif reqId == 2:
-        #         self.db.insert_data_to_daily_table('daily_data', ticker, date, bar.open, bar.high, bar.low,
-        #                                            bar.close, bar.volume)
-        # except ValueError as e:
-        #     print(f"Error converting date: {e}")
-
         try:
             # contract = next((entry['contract'] for entry in self.contracts if entry['reqId'] == reqId), None)
             if reqId in self.reqId_info:
@@ -110,11 +83,6 @@ class IBApi(EClient, EWrapper):
                 # Process and insert data based on data_type
 
                 ny_tz = pytz.timezone('America/New_York')
-                # date = None
-
-                # date_str, time_str, tz_str = bar.date.split()
-
-                # data_type = contract['data_type']  # Χρησιμοποιούμε το custom attribute
                 if data_type == 'minute':
                     date_str, time_str, tz_str = bar.date.split()
                     date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
@@ -145,6 +113,7 @@ class IBApi(EClient, EWrapper):
 
     def historicalDataEnd(self, reqId, start, end):
         print("Historical data download complete")
+        self.data_download_complete = True
         self.data_processor.data_ready_queue.put(self.data)
 
     def get_reqId_for_contract(self, contract):
@@ -168,18 +137,15 @@ class IBApi(EClient, EWrapper):
         print(f"Contract found: {contract.symbol}, data_type: {data_type}")
 
         last_date = self.db.get_last_date_for_symbol(contract.symbol)
-        # Αν δεν υπάρχει, ξεκινήστε κατέβασμα από την αρχή ή κάποια άλλη προεπιλεγμένη ημερομηνία
         if last_date is None:
-            start_date = "20240826 09:13:00"  # Θέστε μία αρχική ημερομηνία (χωρίς ζώνη ώρας)
+            start_date = "20240826 09:13:00"
         else:
             ny_tz = pytz.timezone('America/New_York')
             start_date = last_date.astimezone(ny_tz).strftime(
-                '%Y%m%d %H:%M:%S')  # Μετατροπή ημερομηνίας σε σωστή μορφή
+                '%Y%m%d %H:%M:%S')
 
-        # Δεν χρειάζεται το end_date για συνεχή λήψη δεδομένων
-        duration_str = "3 D"  # Καθορίζει τη διάρκεια που θέλουμε να κατεβάσουμε τα δεδομένα
+        duration_str = "3 D"
 
-        # Κατεβάστε δεδομένα από την τελευταία ημερομηνία και συνεχίστε τη λήψη δεδομένων σε πραγματικό χρόνο
         self.reqHistoricalData(
             reqId=reqId,  # Χρησιμοποιήστε ένα μοναδικό reqId για κάθε αίτημα
             contract=contract,
@@ -193,7 +159,6 @@ class IBApi(EClient, EWrapper):
             chartOptions=[]
         )
 
-        # τελευταία ημερομηνία που έχετε δεδομένα στη βάση
         # self.reqMktData(
         #     4,
         #     contract,

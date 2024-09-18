@@ -19,7 +19,7 @@ class OrderManager:
         self.alert_active = {}
         self.positions = {}
         self.active_positions = []
-        self.lock = threading.Lock()  # Αρχικοποίηση του lock
+        self.lock = threading.Lock()
 
 
     def set_order_outside_rth(self):

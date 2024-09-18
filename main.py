@@ -159,7 +159,6 @@ def run_order_script():
 
         print("Connection established, nextValidOrderId:", app.nextValidOrderId)
 
-        # reqId = 3
         contract = app.create_contract(symbol, secType, exchange, currency, data_type)
         print(f"Created contract: {contract}")
         req_id = app.get_reqId_for_contract(contract)
@@ -169,10 +168,14 @@ def run_order_script():
             print(f"{idx}: reqId={contract_entry['reqId']}, contract={contract_entry['contract']}")
 
         order_manager.initialize_contract(symbol)
-        # Ενημέρωση δεδομένων πριν την επεξεργασία
+        app.data_download_complete = False
         app.update_minute_data_for_symbol(contract)
 
-        # time.sleep(80)
+        while not app.data_download_complete:
+            print("Waiting for data download to complete...")
+            time.sleep(5)
+        print(f"Data download for {symbol} is complete.")
+
         add_another = input("Do you want to add another contract? (yes/no): ").strip().lower()
         if add_another != 'yes':
             break
@@ -208,7 +211,6 @@ def run_order_script():
 
     print("Requesting real time data")
     for contract_dict in app.contracts:
-        # print("In the for loop")
         contract = contract_dict['contract']
         # print(f"Processing contract: {contract.symbol}")
 
@@ -228,10 +230,6 @@ def run_order_script():
         else:
             print(f"Failed to obtain request ID for the contract {contract.symbol}")
 
-    # # 7200
-    # timer = threading.Timer(10, OrderManager.terminate_program)
-    # timer.start()
-
     print("Following main thread: ")
     main_thread = threading.Thread(target=app.order_main_thread_function, args=(
         data_processor, interval_entry, interval_exit, app.contracts, order_manager, decision_queue, decision_flag))
@@ -244,9 +242,8 @@ def run_order_script():
 
     try:
         while not stop_flag.is_set():
-            # print("Running order management...")
             print(f"Running order management... (stop_flag: {stop_flag.is_set()})")
-            time.sleep(5)  # Μικρή καθυστέρηση για την αποφυγή υπερβολικής χρήσης CPU
+            time.sleep(5)
             if stop_flag.is_set():
                 print("Stop flag detected. Exiting main loop.")
 
@@ -263,9 +260,6 @@ def run_order_script():
         esc_listener_thread.join()
         main_thread.join()
         print("All threads have been terminated.")
-    # print("Order script stopped after 2 hours.")
-
-#         gia close me kleisti agora prepei na nai limit order kai fill outside reg hours
 
 def main():
     while True:

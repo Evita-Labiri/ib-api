@@ -1,5 +1,8 @@
+import os
 import queue
-from datetime import datetime, timedelta, time
+import threading
+import zipfile
+from datetime import datetime, timedelta
 import pandas as pd
 
 from order_manager import OrderManager
@@ -15,6 +18,7 @@ class DataProcessor:
         self.data_in_short_position = False
         self.place_orders_outside_rth = False
         self.order_manager = OrderManager()
+        self.lock = threading.Lock()
 
     def process_queue_data(self):
         while not self.data_ready_queue.empty():
@@ -64,7 +68,7 @@ class DataProcessor:
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
         df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
-        df['Session'] = (df['Date'].dt.date != df['Date'].shift(1).dt.date).cumsum()
+        df['Session'] = (df['Date'].dt.date != df['Date'].shift(1).dt.date).astype(int).cumsum()
         df['Typical_Price'] = (df['Close'] + df['High'] + df['Low']) / 3
         df['Cumulative_Typical_Price_Volume'] = (df['Typical_Price'] * df['Volume']).groupby(df['Session']).cumsum()
         df['Cumulative_Volume'] = df['Volume'].groupby(df['Session']).cumsum()
@@ -285,48 +289,6 @@ class DataProcessor:
             print(f"Invalid interval '{user_input}', using no interval.")
             return None
 
-    # def fill_gaps_in_data(self, df, contract, app):
-    #     """
-    #     Fills gaps in historical data by fetching the missing data from the API.
-    #     """
-    #     ny_tz = pytz.timezone('America/New_York')
-    #     # df['Date'] = pd.to_datetime(df['Date'])
-    #     # df['Date'] = df['Date'].dt.tz_localize(ny_tz, nonexistent='shift_forward', ambiguous='NaT')
-    #     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    #     df['Date'] = df['Date'].dt.tz_localize(ny_tz, nonexistent='shift_forward', ambiguous='NaT')
-    #     df = df.dropna(subset=['Date'])
-    #
-    #     df = df.set_index('Date')
-    #
-    #     # Δημιουργούμε μια σειρά από ημερομηνίες χωρίς κενά, σε ζώνη ώρας Νέας Υόρκης
-    #     all_times = pd.date_range(start=df.index.min(), end=df.index.max(), freq='1min', tz=ny_tz)
-    #
-    #     # Εντοπίζουμε τα κενά
-    #     missing_times = all_times.difference(df.index)
-    #
-    #     if not missing_times.empty:
-    #         print(f"Found missing data for {contract.symbol} from {missing_times[0]} to {missing_times[-1]}.")
-    #
-    #         for missing_time in missing_times:
-    #             start_time = missing_time - timedelta(minutes=2)
-    #             end_time = missing_time + timedelta(minutes=2)
-    #
-    #             # Σωστή μετατροπή σε UTC για το API request (αν απαιτείται από το API)
-    #             # start_time_utc = start_time.astimezone(pytz.utc).strftime('%Y%m%d %H:%M:%S')
-    #             # end_time_utc = end_time.astimezone(pytz.utc).strftime('%Y%m%d %H:%M:%S')
-    #
-    #             app.update_minute_data_for_symbol(contract)
-    #
-    #             # Μετά την κλήση, ενημερώνουμε το DataFrame με τα νέα δεδομένα
-    #             new_data = self.fetch_data_from_db('minute_data', start_time.strftime('%Y-%m-%d %H:%M:%S'),
-    #                                                end_time.strftime('%Y-%m-%d %H:%M:%S'), ticker=contract.symbol)
-    #
-    #             if not new_data.empty:
-    #                 df = pd.concat([df, new_data])
-    #     df = df.sort_index()
-    #     df = df.reset_index()
-    #     return df
-
     @staticmethod
     def resample_data(df, interval):
         resampled_df = df.resample(interval).agg({
@@ -342,7 +304,6 @@ class DataProcessor:
 
     def update_plot(self, contract, days=7,  interval_entry=None, interval_exit=None):
         real_time_data = self.process_queue_data()
-
         # Εκτύπωση της λίστας real_time_data πριν τη δημιουργία της DataFrame
         print("Real-time Data List:")
         print(self.real_time_data)
@@ -360,7 +321,6 @@ class DataProcessor:
         # print(df_minute.dtypes)
 
         ticker = contract.symbol
-
         real_time_df = pd.DataFrame(real_time_data,
                                     columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker'])
         real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
@@ -403,34 +363,34 @@ class DataProcessor:
         if not combined_data.empty:
             if 'Date' in combined_data.columns:
                 combined_data['Date'] = pd.to_datetime(combined_data['Date'], errors='coerce')
-
-            if 'Date' in combined_data.columns:
                 combined_data.set_index('Date', inplace=True)
+                combined_data.sort_values(by='Date', inplace=True)
+                print('Combined Data')
+                print(combined_data.tail())
 
-            combined_data.sort_values(by='Date', inplace=True)
-            print('Combined Data')
-            print(combined_data.tail())
-            #
+            # Resample and process for entry signals
             # print("Df_entry resampling")
             df_entry = self.resample_data(combined_data, interval_entry)
             # print(df_entry.tail())
+
             # print("Df_entry indicators")
             df_entry = self.calculate_indicators(df_entry)
             # print(df_entry.tail())
 
-        # Resample and process for exit signals
-        #     print("Df_exit resampling")
+            # print("Df_entry signals")
+            df_entry = self.generate_signals(df_entry)
+            # print(df_entry.tail())
+
+            # Resample and process for exit signals
+            #print("Df_exit resampling")
             df_exit = self.resample_data(combined_data, interval_exit)
             # print(df_exit.tail())
+
             # print("Df_exit indicators")
             df_exit = self.calculate_indicators(df_exit)
             # print(df_exit.tail())
 
-            # Generate signals for entry and exit
-            # print("Df_entry signals")
-            df_entry = self.generate_signals(df_entry)
-            # print(df_entry.tail())
-            # print("Df_exit indicators")
+            # print("Df_exit signals")
             df_exit = self.generate_signals(df_exit)
             # print(df_exit.tail())
 
@@ -449,8 +409,9 @@ class DataProcessor:
             print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
             print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
 
-            self.export_to_excel(df_entry, filename=f"signals_{interval_entry}.xlsx")
-            self.export_to_excel(df_exit, filename=f"signals_{interval_exit}.xlsx")
+            with self.lock:
+                self.export_to_excel({f'{contract.symbol}_entry': df_entry}, filename=f"signals_{interval_entry}.xlsx")
+                self.export_to_excel({f'{contract.symbol}_exit': df_exit}, filename=f"signals_{interval_exit}.xlsx")
 
             return df_entry, df_exit
 
@@ -458,10 +419,43 @@ class DataProcessor:
             print("No data to process.")
             return None
 
-    @staticmethod
-    def export_to_excel(df, filename="output.xlsx"):
-        # print(f"Exporting to Excel. Data:\n{df.tail()}")
-        if 'Date' in df.columns:
-            df['Date'] = df['Date'].dt.tz_localize(None)
-        df.to_excel(filename, index=False)
+    # @staticmethod
+    # def export_to_excel(df, filename="output.xlsx"):
+    #     # print(f"Exporting to Excel. Data:\n{df.tail()}")
+    #     # if 'Date' in df.columns:
+    #     #     df['Date'] = df['Date'].dt.tz_localize(None)
+    #     df.to_excel(filename, index=False)
+
+    def export_to_excel(self, dict_of_dfs, filename="output.xlsx"):
+        try:
+            if os.path.exists(filename):
+                # Χρήση ExcelWriter με mode 'a' για append και engine 'openpyxl' για να μην διαγράφονται τα παλιά φύλλα
+                with pd.ExcelWriter(filename, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+                    for ticker, df in dict_of_dfs.items():
+                        # Καθαρίζουμε τη στήλη Date
+                        if 'Date' in df.columns:
+                            df['Date'] = df['Date'].dt.tz_localize(None)
+
+                        # Γράφουμε κάθε DataFrame σε ξεχωριστό φύλλο στο Excel, με το όνομα του ticker ως το όνομα του φύλλου
+                        df.to_excel(writer, sheet_name=ticker, index=False)
+
+                print(f"Data appended successfully to {filename}")
+            else:
+                # Δημιουργία αρχείου αν δεν υπάρχει
+                with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+                    for ticker, df in dict_of_dfs.items():
+                        # Καθαρίζουμε τη στήλη Date
+                        if 'Date' in df.columns:
+                            df['Date'] = df['Date'].dt.tz_localize(None)
+
+                        # Γράφουμε κάθε DataFrame σε ξεχωριστό φύλλο στο Excel, με το όνομα του ticker ως το όνομα του φύλλου
+                        df.to_excel(writer, sheet_name=ticker, index=False)
+
+                print(f"Data exported successfully to {filename}")
+
+        except zipfile.BadZipFile:
+            print(f"BadZipFile error occurred. Deleting corrupted file {filename} and trying again.")
+            os.remove(filename)
+            self.export_to_excel(dict_of_dfs, filename)
+
 
