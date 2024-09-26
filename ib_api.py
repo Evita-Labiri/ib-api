@@ -3,7 +3,7 @@ import queue
 import pandas as pd
 import pytz
 from time import sleep
-from datetime import datetime, time, timedelta
+from datetime import datetime
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
@@ -84,11 +84,23 @@ class IBApi(EClient, EWrapper):
 
                 ny_tz = pytz.timezone('America/New_York')
                 if data_type == 'minute':
-                    date_str, time_str, tz_str = bar.date.split()
-                    date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
-                    date = ny_tz.localize(date).replace(tzinfo=None)
-                    self.db.insert_data_to_minute_table('minute_data', contract.symbol, date, bar.open, bar.high,
-                                                        bar.low, bar.close, bar.volume)
+                    date_parts = bar.date.split()
+
+                    if len(date_parts) == 3:
+                        date_str, time_str, tz_str = date_parts
+                        date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
+                        # Ζώνη ώρας υπάρχει, άρα την τοπικοποιούμε
+                        date = ny_tz.localize(date).replace(tzinfo=None)
+                        print(f"Date with timezone: {date} (Timezone: {tz_str})")
+
+                        # Αν υπάρχουν μόνο 2 μέρη, τότε δεν υπάρχει ζώνη ώρας
+                    elif len(date_parts) == 2:
+                        date_str, time_str = date_parts
+                        date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
+                        # Δεν υπάρχει ζώνη ώρας, άρα το τοπικοποιούμε μόνο με βάση την ώρα Νέας Υόρκης
+                        date = ny_tz.localize(date).replace(tzinfo=None)
+                        print(f"Date without timezone: {date}")
+
                 elif data_type == 'daily':
                     date_str = bar.date
                     date = datetime.strptime(date_str, '%Y%m%d')
@@ -489,6 +501,7 @@ class IBApi(EClient, EWrapper):
                     print(f"Contract for reqId {contract_dict['reqId']} is not set.")
 
             if combined_data_dict:
+                order_manager.wait_for_market_time()
                 # print(f"Combined data dictionary: {combined_data_dict}")
                 for symbol, data in combined_data_dict.items():
                     if isinstance(data['entry'], pd.DataFrame) and isinstance(data['exit'], pd.DataFrame):

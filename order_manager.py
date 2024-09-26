@@ -1,5 +1,4 @@
 import threading
-from asyncio import timeout
 from datetime import datetime, time, timedelta
 from queue import Empty
 from time import sleep
@@ -267,7 +266,9 @@ class OrderManager:
                 signal = decision_queue.get(timeout=60)
                 print(f"Signal received from queue: {signal}")
 
-                # self.wait_for_market_time()
+                if not self.wait_for_market_time():
+                    print("Market not ready for order placement yet (less than 10 minutes after open). Skipping order.")
+                    continue
 
                 contract_symbol, action, index, close_price, timestamp = signal
                 print(f"Handling decision: {signal}")
@@ -409,6 +410,7 @@ class OrderManager:
                 continue
 
     def wait_for_market_time(self):
+        print("Checking if time is past 16:30")
         est = pytz.timezone('America/New_York')
         now = datetime.now(est)
         market_open_time = datetime(now.year, now.month, now.day, 9, 30, tzinfo=est)  # 9:30 PM EST is market open time
@@ -463,7 +465,7 @@ class OrderManager:
     #             else:
     #                 print(f"Order {orderId} for {contract_symbol} has status {status}. No action taken.")
     #
-    #             break  # Σταματάμε τον έλεγχο γιατί βρήκαμε το αντίστοιχο position
+    #             break
 
     def handle_order_execution(self, orderId, status):
         # with self.lock:

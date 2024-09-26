@@ -18,7 +18,8 @@ class Database:
 
     def create_engine(self):
         try:
-            connection_string = f"mysql+mysqlconnector://{os.getenv('STOCKDATADB_UN')}:{os.getenv('STOCKDATADB_PASS')}@localhost/stockdatadb"
+            connection_string = f"mysql+mysqlconnector://{os.getenv('STOCKDATADB_UN')}:{os.getenv('STOCKDATADB_PASS')}@100.64.0.21/stockdatadb"
+            # connection_string = f"mysql+mysqlconnector://{os.getenv('STOCKDATADB_UN')}:{os.getenv('STOCKDATADB_PASS')}@localhost/stockdatadb"
             engine = create_engine(connection_string, connect_args={'connect_timeout': 28800})
             print("Successfully connected to the database with SQLAlchemy")
             return engine

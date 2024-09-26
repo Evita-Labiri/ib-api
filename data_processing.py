@@ -162,18 +162,11 @@ class DataProcessor:
                 # if df['Close'].iloc[i - 1] < df['BB_Lower'].iloc[i - 1] and df['Close'].iloc[i - 2] >= df['BB_Lower'].iloc[
                 #     i - 2]:
                 #     df.at[i, 'Price_crossed_above_BB_Lower_long'] = True
-
+                #
                 # if any(df.loc[i, entry_long_criteria]):
                 #     df.at[i, 'Long_Entry'] = True
                 #     self.data_in_long_position = True
                 #     self.order_manager.open_long_position()
-
-                # first_four_criteria_long = (
-                #         df['EMA9_above_EMA20_long'].iloc[i] == True and
-                #         df['EMA9_and_EMA20_above_EMA200_long'].iloc[i] == True and
-                #         df['Close_above_VWAP_long'].iloc[i] == True and
-                #         df['MACD_above_Signal_long'] == True
-                # )
 
                 first_four_criteria_long = (
                         df.at[i, 'EMA9_above_EMA20_long'] and
@@ -214,13 +207,6 @@ class DataProcessor:
                 #     df.at[i, 'Short_Entry'] = True
                 #     self.data_in_short_position = True
                 #     self.order_manager.open_short_position()
-                #
-                # first_four_criteria_short = (
-                #         df[].iloc[i] == True and
-                #         df[].iloc[i] == True and
-                #         df[].iloc[i] == True and
-                #         df[] == True
-                # )
 
                 first_four_criteria_short = (
                         df.at[i, 'EMA9_below_EMA20_short'] and
@@ -409,9 +395,9 @@ class DataProcessor:
             print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
             print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
 
-            with self.lock:
-                self.export_to_excel({f'{contract.symbol}_entry': df_entry}, filename=f"signals_{interval_entry}.xlsx")
-                self.export_to_excel({f'{contract.symbol}_exit': df_exit}, filename=f"signals_{interval_exit}.xlsx")
+            # with self.lock:
+            #     self.export_to_excel({f'{contract.symbol}_entry': df_entry}, filename=f"signals_{interval_entry}.xlsx")
+            #     self.export_to_excel({f'{contract.symbol}_exit': df_exit}, filename=f"signals_{interval_exit}.xlsx")
 
             return df_entry, df_exit
 
