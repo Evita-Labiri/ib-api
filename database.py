@@ -12,8 +12,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[logging.FileHandler("ib_api.log")]
 )
-logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
-
+# logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
 
 class Database:
     def __init__(self):

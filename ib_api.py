@@ -99,7 +99,7 @@ class IBApi(EClient, EWrapper):
                 contract_info = self.reqId_info[reqId]
                 contract = contract_info['contract']
                 data_type = contract_info['data_type']
-                # Process and insert data based on data_type
+                gr_tz = pytz.timezone('Europe/Athens')
                 ny_tz = pytz.timezone('America/New_York')
 
                 if data_type == 'minute':
@@ -108,16 +108,17 @@ class IBApi(EClient, EWrapper):
                     if len(date_parts) == 3:
                         date_str, time_str, tz_str = date_parts
                         date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
-                        date = ny_tz.localize(date)
-                        logger.debug(f"Date with timezone: {date} (Timezone: {tz_str})")
                         # print(f"Date with timezone: {date} (Timezone: {tz_str})")
+                        date = gr_tz.localize(date)
+                        date_ny = date.astimezone(ny_tz)
 
                     elif len(date_parts) == 2:
                         date_str, time_str = date_parts
                         date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
-                        date = ny_tz.localize(date)
-                        # print(f"Date without timezone: {date}")
-                    self.db.insert_data_to_minute_table('minute_data', contract.symbol, date, bar.open, bar.high, bar.low,
+                        print(f"Date without timezone: {date}")
+                        date = gr_tz.localize(date)
+                        date_ny = date.astimezone(ny_tz)
+                    self.db.insert_data_to_minute_table('minute_data', contract.symbol, date_ny, bar.open, bar.high, bar.low,
                                                     bar.close, bar.volume)
 
                 elif data_type == 'daily':
