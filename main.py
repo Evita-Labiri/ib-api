@@ -137,6 +137,7 @@ def run_order_script():
     data_processor.order_manager = order_manager
     logger.info("Connecting to TWS API...")
     app.connect("100.64.0.21", 7497, 1)
+    # app.connect("100.64.0.69", 7497, 1)
 
     t1 = threading.Thread(target=app.run)
     t1.start()
@@ -174,61 +175,66 @@ def run_order_script():
 
     for ticker_entry in tickers:
         symbol = ticker_entry[0]
+        print(f"Ticker entry: {ticker_entry}")
+
         date = ticker_entry[1]
+        print(f"Processing symbol: {symbol} for date: {date}")
 
-    logger.info(f"Processing symbol: {symbol} for date: {date}")
+        logger.info(f"Processing symbol: {symbol} for date: {date}")
 
-    default_symbol = "AAPL"
-    default_secType = "STK"
-    default_exchange = "SMART"
-    default_currency = "USD"
-    default_data_type = "minute"
+        default_symbol = "AAPL"
+        default_secType = "STK"
+        default_exchange = "SMART"
+        default_currency = "USD"
+        default_data_type = "minute"
 
-    secType = default_secType
-    exchange = default_exchange
-    currency = default_currency
-    data_type = default_data_type
+        secType = default_secType
+        exchange = default_exchange
+        currency = default_currency
+        data_type = default_data_type
 
-    # symbol = input(f"Enter the symbol (e.g., '{default_symbol}'): ").upper() or default_symbol
-    # secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
-    # exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
-    # currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
-    # data_type = input(f"Enter the data_type (e.g., '{default_data_type}'): ").upper() or default_data_type
+        # symbol = input(f"Enter the symbol (e.g., '{default_symbol}'): ").upper() or default_symbol
+        # secType = input(f"Enter the security type (e.g., '{default_secType}'): ").upper() or default_secType
+        # exchange = input(f"Enter the exchange (e.g., '{default_exchange}'): ").upper() or default_exchange
+        # currency = input(f"Enter the currency (e.g., '{default_currency}'): ").upper() or default_currency
+        # data_type = input(f"Enter the data_type (e.g., '{default_data_type}'): ").upper() or default_data_type
 
-    logger.info(
-        f"User entered symbol: {symbol}, secType: {secType}, exchange: {exchange}, currency: {currency}, data_type: {data_type}")
+        logger.info(
+            f"User entered symbol: {symbol}, secType: {secType}, exchange: {exchange}, currency: {currency}, data_type: {data_type}")
 
-    while app.nextValidOrderId is None:
-        logger.debug("Waiting for TWS connection acknowledgment...")
-        print("Waiting for TWS connection acknowledgment...")
-        time.sleep(1)
+        while app.nextValidOrderId is None:
+            logger.debug("Waiting for TWS connection acknowledgment...")
+            print("Waiting for TWS connection acknowledgment...")
+            time.sleep(1)
 
-    logger.info(f"Connection established, nextValidOrderId: {app.nextValidOrderId}")
-    print("Connection established, nextValidOrderId:", app.nextValidOrderId)
+        logger.info(f"Connection established, nextValidOrderId: {app.nextValidOrderId}")
+        print("Connection established, nextValidOrderId:", app.nextValidOrderId)
 
-    contract = app.create_contract(symbol, secType, exchange, currency, data_type)
-    logger.info(f"Created contract for symbol: {symbol}, contract details: {contract}")
-    print(f"Created contract: {contract}")
-    req_id = app.get_reqId_for_contract(contract)
-    app.contracts.append({'reqId': req_id, 'contract': contract})
-    logger.info(f"Added contract to the list, current number of contracts: {len(app.contracts)}")
-    # print("Current list of contracts:")
+        contract = app.create_contract(symbol, secType, exchange, currency, data_type)
+        logger.info(f"Created contract for symbol: {symbol}, contract details: {contract}")
+        print(f"Created contract: {contract}")
+        req_id = app.get_reqId_for_contract(contract)
+        app.contracts.append({'reqId': req_id, 'contract': contract})
+        logger.info(f"Added contract to the list, current number of contracts: {len(app.contracts)}")
+        # print("Current list of contracts:")
 
-    # Logging statement
-    for idx, contract_entry in enumerate(app.contracts, start=1):
-        # print(f"{idx}: reqId={contract_entry['reqId']}, contract={contract_entry['contract']}")
-        logger.debug(f"{idx}: reqId={contract_entry['reqId']}, contract={contract_entry['contract']}")
+        # Logging statement
+        for idx, contract_entry in enumerate(app.contracts, start=1):
+            # print(f"{idx}: reqId={contract_entry['reqId']}, contract={contract_entry['contract']}")
+            logger.debug(f"{idx}: reqId={contract_entry['reqId']}, contract={contract_entry['contract']}")
 
-    order_manager.initialize_contract(symbol)
-    app.data_download_complete = False
-    logger.info(f"Starting data download for {symbol}")
-    app.update_minute_data_for_symbol(contract)
+        order_manager.initialize_contract(symbol)
+        app.data_download_complete = False
+        logger.info(f"Starting data download for {symbol}")
+        app.update_minute_data_for_symbol(contract)
 
-    while not app.data_download_complete:
-        # print("Waiting for data download to complete...")
-        logger.debug("Waiting for data download to complete...")
-        time.sleep(5)
-    print(f"Data download for {symbol} is complete.")
+        while not app.data_download_complete:
+            # print("Waiting for data download to complete...")
+            logger.debug("Waiting for data download to complete...")
+            time.sleep(5)
+        print(f"Data download for {symbol} is complete.")
+    logger.info("All tickers processed.")
+    print("All tickers processed.")
 
     # add_another = input("Do you want to add another contract? (yes/no): ").strip().lower()
     # logger.info(f"User chose to add another contract: {add_another}")

@@ -304,11 +304,11 @@ class Database:
 
     def get_tickers_from_db(self):
         current_date = datetime.now().strftime('%Y-%m-%d')
-        query = text("SELECT ticker FROM daily_tickers WHERE date = :current_date")
+        query = text("SELECT ticker, date FROM daily_tickers WHERE date = :current_date")
         try:
             with self.engine.connect() as connection:
                 result = connection.execute(query, {"current_date": current_date})
-                tickers = [row[0] for row in result]
+                tickers = [row for row in result]
 
                 if tickers:
                     for ticker in tickers:
