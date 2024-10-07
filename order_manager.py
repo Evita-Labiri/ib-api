@@ -2,12 +2,20 @@ import threading
 from datetime import datetime, time, timedelta
 from queue import Empty
 from time import sleep
-
 import pandas as pd
 import pytz
 import keyboard
-
 import api_helper
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("ib_api.log")]
+)
+logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
+
 
 class OrderManager:
     def __init__(self):
@@ -20,40 +28,46 @@ class OrderManager:
         self.active_positions = []
         self.lock = threading.Lock()
 
-
     def set_order_outside_rth(self):
         while True:
-            # Ρωτάμε τον χρήστη αν θέλει να επιτρέψει την εκτέλεση εντολών εκτός RTH
             outside_rth_input = input(
                 "Do you want to place orders outside regular trading hours? (yes/no): ").strip().lower()
             if outside_rth_input == 'yes':
                 self.place_orders_outside_rth = True
+                logger.info("Orders outside regular trading hours are allowed.")
                 break
             elif outside_rth_input == 'no':
+                logger.info("Orders outside regular trading hours are not allowed.")
                 print("Orders outside regular trading hours are not allowed.")
-                # Δίνουμε επιλογές στον χρήστη για να προσπαθήσει ξανά ή να επιστρέψει στο κεντρικό μενού
                 choice = input("Would you like to retry or return to the main menu? (retry/menu): ").strip().lower()
                 if choice == 'retry':
                     continue  # Επιστρέφει στην αρχή της while loop για να προσπαθήσει ξανά
                 elif choice == 'menu':
+                    logger.info("Returning to the main menu.")
                     print("Returning to the main menu.")
                     return  # Επιστρέφει στο κεντρικό μενού (πρέπει να χειριστείς το επιστροφή στο μενού εκτός της συνάρτησης)
                 else:
-                    print("Invalid choice. Please try again.")
+                    logger.warning("Invalid choice. Please try again.")
+                    # print("Invalid choice. Please try again.")
             else:
-                print("Invalid input. Please enter 'yes' or 'no'.")
+                logger.warning("Invalid input. Please enter 'yes' or 'no'.")
+                # print("Invalid input. Please enter 'yes' or 'no'.")
 
     def is_market_open(self):
         now = datetime.now(pytz.timezone('America/New_York'))
-        print(f"Current time in NY: {now}")
+        logger.info(f"Current time in NY: {now}")
+        # print(f"Current time in NY: {now}")
         market_open = time(9, 30)
         market_close = time(16, 0)
         if now.weekday() >= 5:  # If it's Saturday(5) or Sunday(6)
+            logger.info("Market is closed because it's the weekend.")
             return False
         if market_open <= now.time() <= market_close:
+            logger.info("Market is currently open.")
             print("Market is currently open.")
             return True
         else:
+            logger.info("Market is closed at this time.")
             print("Market is closed at this time.")
             return False
 
@@ -62,6 +76,7 @@ class OrderManager:
         limit_price = float(input(f"Enter limit price for {action} order: "))
         profit_target = float(input(f"Enter profit target for {action} order: "))
         stop_loss = float(input(f"Enter stop loss for {action} order: "))
+        logger.info(f"Order details for {action}: quantity={quantity}, limit_price={limit_price}, profit_target={profit_target}, stop_loss={stop_loss}")
         return quantity, limit_price, profit_target, stop_loss
 
     def check_and_place_order(self, contract, action, quantity, limit_price, profit_target, stop_loss):
@@ -75,12 +90,15 @@ class OrderManager:
         if self.place_orders_outside_rth or self.is_market_open():
             app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss,
                                          outside_rth=self.place_orders_outside_rth)
-            print(f"Placed {action} order for {quantity} shares at {limit_price}")
+            logger.info(f"Placed {action} order for {quantity} shares at {limit_price}")
+            # print(f"Placed {action} order for {quantity} shares at {limit_price}")
         else:
-            print("Market is closed and order placing outside RTH is not allowed.")
+            logger.warning("Market is closed and order placing outside RTH is not allowed.")
+            # print("Market is closed and order placing outside RTH is not allowed.")
 
     def send_alert(self, message):
-        print(f"ALERT: {message}")
+        logger.info(f"ALERT: {message}")
+        # print(f"ALERT: {message}")
 
     # def wait_for_user_decision(self, message):
     #     while True:
@@ -99,9 +117,11 @@ class OrderManager:
                 'status': 'Closed'
             }
             self.alert_active[contract_symbol] = False
-            print(f"Initialized contract {contract_symbol} with default position values.")
+            logger.info(f"Initialized contract {contract_symbol} with default position values.")
+            # print(f"Initialized contract {contract_symbol} with default position values.")
         else:
-            print(f"Contract {contract_symbol} already initialized.")
+            logger.info(f"Contract {contract_symbol} already initialized.")
+            # print(f"Contract {contract_symbol} already initialized.")
 
     # def add_position(self, position_type, order_id, status="Open"):
     #     position = {
@@ -115,10 +135,10 @@ class OrderManager:
         for position in self.positions:
             if position['order_id'] == order_id:
                 position['status'] = new_status
+                # logger.info(f"Updated position {order_id} status to {new_status}")
                 break
 
     def get_position_to_close(self, position_type):
-        # Αναζητά την τελευταία ανοιχτή θέση για τον συγκεκριμένο τύπο (Long/Short)
         for position in reversed(self.positions):  # Ξεκινάμε από το τέλος της λίστας
             if position['type'] == position_type and position['status'] == 'Open':
                 return position
@@ -127,35 +147,40 @@ class OrderManager:
     def open_long_position(self):
         self.in_long_position = True
         self.in_short_position = False
-        # Άλλες ενέργειες για το άνοιγμα long θέσης
+        # logger.info("Opened long position.")
 
     def open_short_position(self):
         self.in_short_position = True
         self.in_long_position = False
-        # Άλλες ενέργειες για το άνοιγμα short θέσης
+        # logger.info("Opened short position.")
 
     def close_long_position(self):
         self.in_long_position = False
-        # Άλλες ενέργειες για το κλείσιμο long θέσης
+        # logger.info("Closed long position.")
 
     def close_short_position(self):
         self.in_short_position = False
+        # logger.info("Closed short position.")
 
     def process_signals_and_place_orders(self, df_entry, df_exit, decision_queue, decision_flag, contract_symbol):
-        print(f"Running process signals for {contract_symbol}")
+        logger.info(f"Running process signals for {contract_symbol}")
+        # print(f"Running process signals for {contract_symbol}")
         # with self.lock:
         signals = []
 
         if not isinstance(df_entry, pd.DataFrame):
-            print(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
+            logger.error(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
+            # print(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
             return
         if not isinstance(df_exit, pd.DataFrame):
-            print(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
+            logger.error(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
+            # print(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
             return
 
         # Ελέγχουμε αν υπάρχει ενεργή ειδοποίηση για το σύμβολο
         if self.alert_active.get(contract_symbol, False):
-            print(f"Alert already active for {contract_symbol}, skipping.")
+            logger.info(f"Alert already active for {contract_symbol}, skipping.")
+            # print(f"Alert already active for {contract_symbol}, skipping.")
             return
 
         try:
@@ -163,10 +188,8 @@ class OrderManager:
             df_exit['Date'] = pd.to_datetime(df_exit['Date'], errors='coerce').dt.tz_localize(None)
 
             i = len(df_entry) - 1
-            # Παίρνουμε το timestamp από το df_entry
             timestamp = df_entry.iloc[i]['Date']
 
-            # Διασφαλίζουμε ότι το timestamp είναι tz-naive (χωρίς ζώνη ώρας)
             if pd.api.types.is_datetime64_any_dtype(timestamp):
                 timestamp = timestamp.tz_localize(None)
 
@@ -191,6 +214,7 @@ class OrderManager:
 
             # Έλεγχος για αντικρουόμενα σήματα entry και exit
             if (long_entry and long_exit) or (short_entry and short_exit):
+                logger.warning(f"Conflicting signals for {contract_symbol}. No action taken.")
                 print(f"Conflicting signals for {contract_symbol}. No action taken.")
                 # continue
                 self.alert_active[contract_symbol] = False
@@ -198,6 +222,7 @@ class OrderManager:
 
             # Έλεγχος για ταυτόχρονα Long και Short Entry
             if long_entry and short_entry:
+                logger.warning(f"Both Long Entry and Short Entry signals present for {contract_symbol}. No action taken.")
                 print(
                     f"Both Long Entry and Short Entry signals present for {contract_symbol}. No action taken.")
                 # continue
@@ -207,6 +232,7 @@ class OrderManager:
             # Διαχείριση long entry signals
             if long_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
                 signals.append((contract_symbol, 'long', i, previous_close, timestamp))
+                logger.info(f"Long entry signal detected: {signals[-1]}")
                 print(f"Long entry signal detected: {signals[-1]}")
                 self.alert_active[contract_symbol] = True
                 # break
@@ -214,6 +240,7 @@ class OrderManager:
             # Διαχείριση short entry signals
             if short_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
                 signals.append((contract_symbol, 'short', i, previous_close, timestamp))
+                logger.info(f"Short entry signal detected: {signals[-1]}")
                 print(f"Short entry signal detected: {signals[-1]}")
                 self.alert_active[contract_symbol] = True
                 # break
@@ -221,6 +248,7 @@ class OrderManager:
             # Διαχείριση long exit signals
             if long_exit and self.positions[contract_symbol]['in_long_position']:
                 signals.append((contract_symbol, 'exit_long', i, previous_close, timestamp))
+                logger.info(f"Long exit signal detected: {signals[-1]}")
                 print(f"Long exit signal detected: {signals[-1]}")
                 self.alert_active[contract_symbol] = True
                 # break
@@ -228,31 +256,38 @@ class OrderManager:
             # Διαχείριση short exit signals
             if short_exit and self.positions[contract_symbol]['in_short_position']:
                 signals.append((contract_symbol, 'exit_short', i, previous_close, timestamp))
+                logger.info(f"Short exit signal detected: {signals[-1]}")
                 print(f"Short exit signal detected: {signals[-1]}")
                 self.alert_active[contract_symbol] = True
                 # break
 
         except KeyError as e:
-            print(f"KeyError at index {i}: {e}, skipping this index.")
+            logger.error(f"KeyError at index {i}: {e}, skipping this index.")
+            # print(f"KeyError at index {i}: {e}, skipping this index.")
             # continue
         except Exception as e:
-            print(f"Unexpected error at index {i}: {e}, skipping this index.")
+            logger.error(f"Unexpected error at index {i}: {e}, skipping this index.")
+            # print(f"Unexpected error at index {i}: {e}, skipping this index.")
             # continue
 
         # Αν υπάρχουν signals, τα στέλνουμε στην ουρά
         if signals:
-            print(f"Signals to be added to queue: {signals}")
+            logger.info(f"Signals to be added to queue: {signals}")
+            # print(f"Signals to be added to queue: {signals}")
             for signal in signals:
                 decision_queue.put(signal)
+                logger.info(f"Signal added to queue: {signal}")
                 print(f"Signal added to queue: {signal}")
                 # decision_flag.wait()
                 decision_flag.set()
             decision_flag.clear()
             self.alert_active[contract_symbol] = False
         else:
+            logger.info(f"No signals found for {contract_symbol}")
             print(f"No signals found for {contract_symbol}")
 
     def handle_decision(self, app, decision_queue, decision_flag):
+        logger.info("Handle Decision running...")
         print("Handle Decision running...")
         while True:
             # if stop_flag.is_set():
@@ -261,34 +296,43 @@ class OrderManager:
 
             # with self.lock:
             try:
+                logger.info("Waiting for signal from queue...")
                 print("Waiting for signal from queue...")
                 # signal = decision_queue.get(timeout=120)
                 signal = decision_queue.get(timeout=60)
+                logger.info(f"Signal received from queue: {signal}")
                 print(f"Signal received from queue: {signal}")
 
                 if not self.wait_for_market_time():
+                    logger.warning("Market not ready for order placement yet (less than 10 minutes after open). Skipping order.")
                     print("Market not ready for order placement yet (less than 10 minutes after open). Skipping order.")
                     continue
 
                 contract_symbol, action, index, close_price, timestamp = signal
+                logger.info(f"Handling decision: {signal}")
                 print(f"Handling decision: {signal}")
 
                 contract = next((c['contract'] for c in app.contracts if c['contract'].symbol == contract_symbol), None)
                 if contract is None:
+                    logger.error(f"Contract not found for symbol: {contract_symbol}")
                     print(f"Contract not found for symbol: {contract_symbol}")
                     continue
 
                 while app.nextValidOrderId is None:
+                    logger.info("Waiting for next valid order ID...")
                     print("Waiting for next valid order ID...")
                     sleep(1)
+                logger.info(f"Next valid order ID is {app.nextValidOrderId}")
                 print(f"Next valid order ID is {app.nextValidOrderId}")
 
                 outside_rth = self.place_orders_outside_rth
 
                 if action == 'long':
-                    print(f"Initializing contract for long position: {contract_symbol}")
+                    logger.info(f"Initializing contract for long position: {contract_symbol}")
+                    # print(f"Initializing contract for long position: {contract_symbol}")
                     self.initialize_contract(contract_symbol)
-                    print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+                    logger.debug(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+                    # print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
 
                     quantity = 100
                     limit_price = close_price - (30 / quantity)
@@ -313,6 +357,7 @@ class OrderManager:
                                                      stop_loss_price,
                                                      outside_rth=outside_rth)
                     if orders:
+                        logger.info(f"Orders placed for {contract_symbol}: {orders}")
                         print(f"Orders placed for {contract_symbol}: {orders}")
                         # Only update the position and order ID after a successful placement and increment the order ID
                         self.positions[contract_symbol]['in_long_position'] = True
@@ -321,16 +366,20 @@ class OrderManager:
                             0].orderId  # Ensure the correct order ID is assigned
                         sleep(2)
                         # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                        print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                        logger.debug(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                        # print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
                         self.display_positions()
                     else:
+                        logger.error(f"Failed to place orders for {contract_symbol}.")
                         print(f"Failed to place orders for {contract_symbol}.")
                         self.alert_active[contract_symbol] = False
 
                 elif action == 'short':
-                    print(f"Initializing contract for short position: {contract_symbol}")
+                    logger.info(f"Initializing contract for short position: {contract_symbol}")
+                    # print(f"Initializing contract for short position: {contract_symbol}")
                     self.initialize_contract(contract_symbol)
-                    print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+                    logger.debug(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+                    # print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
 
                     quantity = 100
                     limit_price = close_price + (30 / quantity)
@@ -340,20 +389,23 @@ class OrderManager:
                     orders = app.place_bracket_order(contract, "SELL", quantity, limit_price, profit_target_price,
                                                      stop_loss_price, outside_rth=outside_rth)
                     if orders:
-                        print(f"Orders placed for {contract_symbol}: {orders}")
-                        # Assign the correct order ID from the orders response instead of relying on app.nextValidOrderId
+                        logger.info(f"Orders placed for {contract_symbol}: {orders}")
+                        # print(f"Orders placed for {contract_symbol}: {orders}")
                         self.positions[contract_symbol]['in_short_position'] = True
                         self.positions[contract_symbol]['in_long_position'] = False
                         self.positions[contract_symbol]['order_id'] = orders[
                             0].orderId  # Ensuring the correct order ID is assigned from the first order
                         sleep(2)
                         # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                        print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                        logger.debug(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                        # print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
                         self.display_positions()
                     else:
-                        print(f"Failed to place orders for {contract_symbol}.")
+                        logger.error(f"Failed to place orders for {contract_symbol}.")
+                        # print(f"Failed to place orders for {contract_symbol}.")
                         self.alert_active[contract_symbol] = False
                 elif action == 'exit_long':
+                    logger.info(f"{contract_symbol} - Long Exit detected. Closing open BUY position...")
                     print(f"{contract_symbol} - Long Exit detected. Closing open BUY position...")
                     self.initialize_contract(contract_symbol)
                     position_to_close = self.positions[contract_symbol]
@@ -367,16 +419,18 @@ class OrderManager:
                         orders = app.place_bracket_order(contract, "SELL", quantity, limit_price, profit_target_price,
                                                          stop_loss_price, outside_rth=outside_rth)
                         if orders:
+                            logger.info(f"Orders placed to close position for {contract_symbol}: {orders}")
                             print(f"Orders placed to close position for {contract_symbol}: {orders}")
-                            # Τοποθετούμε το position ως "Pre-Submitted" και θα ενημερωθεί με το status όταν γίνει filled
                             # self.positions[contract_symbol]['status'] = 'PreSubmitted'
                             self.positions[contract_symbol]['in_long_position'] = False
                             sleep(2)
                         else:
+                            logger.error(f"Failed to place exit orders for {contract_symbol}.")
                             print(f"Failed to place exit orders for {contract_symbol}.")
                             self.alert_active[contract_symbol] = False
 
                 elif action == 'exit_short':
+                    logger.info(f"{contract_symbol} - Short Exit detected. Closing open SELL position...")
                     print(f"{contract_symbol} - Short Exit detected. Closing open SELL position...")
                     self.initialize_contract(contract_symbol)
                     position_to_close = self.positions[contract_symbol]
@@ -387,39 +441,54 @@ class OrderManager:
                         profit_target_price = close_price + (100 / quantity)
                         stop_loss_price = close_price - (30 / quantity)
 
-                        # Δημιουργούμε εντολή αγοράς για να κλείσει η short θέση
                         orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
                                                          stop_loss_price, outside_rth=outside_rth)
                         if orders:
-                            print(f"Orders placed to close short position for {contract_symbol}: {orders}")
+                            logger.info(f"Orders placed to close short position for {contract_symbol}: {orders}")
+                            # print(f"Orders placed to close short position for {contract_symbol}: {orders}")
                             # Τοποθετούμε το position ως "Pre-Submitted" και θα ενημερωθεί με το status όταν γίνει filled
                             # self.positions[contract_symbol]['status'] = 'PreSubmitted'
                             self.positions[contract_symbol]['in_short_position'] = False
                             sleep(2)
                         else:
-                            print(f"Failed to place exit orders for {contract_symbol}.")
+                            logger.error(f"Failed to place exit orders for {contract_symbol}.")
+                            # print(f"Failed to place exit orders for {contract_symbol}.")
                             self.alert_active[contract_symbol] = False
                 decision_flag.set()
 
             except Empty:
+                logger.warning("Timeout waiting for signal from queue. No signals received.")
                 print("Timeout waiting for signal from queue. No signals received.")
-                # Αν θέλεις, μπορείς να προσθέσεις κάτι εδώ για να διαχειριστείς την αναμονή χωρίς σήματα
                 continue
             except Exception as e:
+                logger.exception(f"An unexpected error occurred: {str(e)}")
                 print(f"An unexpected error occurred: {str(e)}")
                 continue
 
     def wait_for_market_time(self):
-        print("Checking if time is past 16:30")
+        # print("Waiting")
+        logging.info("Waiting for market time...")
         est = pytz.timezone('America/New_York')
         now = datetime.now(est)
-        market_open_time = datetime(now.year, now.month, now.day, 9, 30, tzinfo=est)  # 9:30 PM EST is market open time
+        # print(f"Current time {now}")
+        market_open_time_naive = datetime(now.year, now.month, now.day, 9, 30)
+        market_open_time = est.localize(market_open_time_naive)
         ten_minutes_after_open = market_open_time + timedelta(minutes=10)
+        # print(f"Now: {now}")
+        # print(f"Market open time: {market_open_time}")
+        # print(f"10 minutes after open: {ten_minutes_after_open}")
 
-        if now < market_open_time:
+        # if now >= ten_minutes_after_open:
+        #     print("It's past 10 minutes after market open, proceeding...")
+        # else:
+        #     print("Waiting for 10 minutes after market open.")
+        if now < ten_minutes_after_open:
             wait_seconds = (ten_minutes_after_open - now).total_seconds()
             wait_minutes = wait_seconds / 60
+
+            logging.info(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
             print(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
+
             sleep(wait_seconds)
 
     # def handle_order_execution(self, orderId, status):
@@ -472,7 +541,8 @@ class OrderManager:
             # Ελέγχουμε αν το order συνδέεται με κάποιο position
         for contract_symbol, position in self.positions.items():
             if position['order_id'] == orderId:
-                print(f"Processing order {orderId} for {contract_symbol} with status: {status}")
+                logger.info(f"Processing order {orderId} for {contract_symbol} with status: {status}")
+                # print(f"Processing order {orderId} for {contract_symbol} with status: {status}")
 
                 # if status in ['PreSubmitted', 'PendingSubmit']:
                 #     # Αν το status είναι Pre-Submitted ή Submitted, κρατάμε την θέση ανοιχτή
@@ -493,7 +563,8 @@ class OrderManager:
 
                     self.positions[contract_symbol]['status'] = 'Locked' if status in ['PreSubmitted',
                                                                                        'PendingSubmit'] else 'Open'
-                    print(f"Order {orderId} for {contract_symbol} is still in {status}. Position locked/open.")
+                    logger.info(f"Order {orderId} for {contract_symbol} is still in {status}. Position locked/open.")
+                    # print(f"Order {orderId} for {contract_symbol} is still in {status}. Position locked/open.")
 
                 elif status in ['Filled', 'Cancelled', 'Ιnactive']:
                     self.positions[contract_symbol]['status'] = 'Closed'
@@ -501,14 +572,19 @@ class OrderManager:
                     self.positions[contract_symbol]['in_short_position'] = False
                     self.positions[contract_symbol]['order_id'] = None
                     self.alert_active[contract_symbol] = False
-                    print(f"Order {orderId} for {contract_symbol} is {status}. Position closed.")
+                    logger.info(f"Order {orderId} for {contract_symbol} is {status}. Position closed.")
+                    # print(f"Order {orderId} for {contract_symbol} is {status}. Position closed.")
                 break
 
     def display_positions(self):
+        logger.info("--- Positions List ---")
         print("\n--- Positions List ---")
         for contract_symbol, pos in self.positions.items():
+            logger.info(f"Contract: {contract_symbol}, Position Type: {'Long' if pos['in_long_position'] else 'Short'}, "
+                        f"Order ID: {pos['order_id']}, Status: {pos['status']}")
             print(f"Contract: {contract_symbol}, Position Type: {'Long' if pos['in_long_position'] else 'Short'}, "
                   f"Order ID: {pos['order_id']}, Status: {pos['status']}")
+        logger.info("----------------------")
         print("----------------------")
 
     # def display_orders(self):
@@ -538,7 +614,7 @@ class OrderManager:
             choice = input("Enter 1, 2, or 3: ")
 
             if choice == '1':
-                # self.display_orders()  # Εμφάνιση των τρεχουσών εντολών
+                # self.display_orders()
                 order_id = input("Enter the Order ID to cancel: ")
                 try:
                     from ib_api import IBApi
@@ -551,8 +627,10 @@ class OrderManager:
 
                     order_id = int(order_id)
                     app.cancel_open_order(order_id)
+                    logger.info(f"Order {order_id} has been cancelled.")
                     # print(f"Order {order_id} has been cancelled.")
                 except ValueError:
+                    logger.error("Invalid Order ID. Please enter a numeric value.")
                     print("Invalid Order ID. Please enter a numeric value.")
             elif choice == '2':
                 decision_queue.put('continue', None, None)
@@ -560,4 +638,5 @@ class OrderManager:
                 decision_queue.put('menu', None, None)
                 stop_flag.set()
             else:
+                logger.warning("Invalid choice. Please try again.")
                 print("Invalid choice. Please try again.")

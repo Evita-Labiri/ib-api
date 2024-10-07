@@ -9,9 +9,19 @@ from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ibapi.order import Order
 import threading
-
 # from globals import stop_flag
 from order_manager import OrderManager
+import logging
+
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("ib_api.log")]
+)
+logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
+
 
 class IBApi(EClient, EWrapper):
     def __init__(self, data_processor, db):
@@ -40,24 +50,30 @@ class IBApi(EClient, EWrapper):
         self.ticker = ticker
 
     def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
-        print("Error: {} {} {} {}".format(reqId, errorCode, errorString, advancedOrderRejectJson))
+        logger.error(f"Error: {reqId} {errorCode} {errorString} {advancedOrderRejectJson}")
+        # print("Error: {} {} {} {}".format(reqId, errorCode, errorString, advancedOrderRejectJson))
 
     def nextValidId(self, orderId):
         super().nextValidId(orderId)
         self.nextValidOrderId = orderId
-        print(f"Next Valid Order ID: {orderId}")
+        logger.info(f"Next Valid Order ID: {orderId}")
+        # print(f"Next Valid Order ID: {orderId}")
 
     def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId,
                     whyHeld, mktCapPrice):
-
+        logger.info(f"Order Status: {orderId}, Status: {status}")
         print(f"Order Status: {orderId}, Status: {status}")
         if status in ['PreSubmitted', 'Submitted']:
+            logger.info(f"Order {orderId} has been successfully placed with status: {status}")
             print(f"Order {orderId} has been successfully placed with status: {status}")
         elif status == 'Filled':
+            logger.info(f"Order {orderId} has been filled.")
             print(f"Order {orderId} has been filled.")
         elif status in ['Cancelled', 'Inactive']:
+            logger.error(f"Order {orderId} failed with status: {status}")
             print(f"Order {orderId} failed with status: {status}")
         else:
+            logger.warning(f"Order {orderId} is in an unknown state: {status}")
             print(f"Order {orderId} is in an unknown state: {status}")
 
         self.order_manager.handle_order_execution(orderId, status)
@@ -71,6 +87,9 @@ class IBApi(EClient, EWrapper):
             f"Exec Details - reqId: {reqId}, symbol: {contract.symbol}, execId: {execution.execId}, orderId: {execution.orderId}, shares: {execution.shares}, lastLiquidity: {execution.lastLiquidity}")
 
     def historicalData(self, reqId, bar):
+        logger.debug("Requesting data...")
+        logger.debug(
+            f'Time: {bar.date}, Open: {bar.open}, High: {bar.high}, Low: {bar.low}, Close: {bar.close}, Volume: {bar.volume}')
         print("Requesting data...")
         print(
             f'Time: {bar.date}, Open: {bar.open}, High: {bar.high}, Low: {bar.low}, Close: {bar.close}, Volume: {bar.volume}')
@@ -81,25 +100,25 @@ class IBApi(EClient, EWrapper):
                 contract = contract_info['contract']
                 data_type = contract_info['data_type']
                 # Process and insert data based on data_type
-
                 ny_tz = pytz.timezone('America/New_York')
+
                 if data_type == 'minute':
                     date_parts = bar.date.split()
 
                     if len(date_parts) == 3:
                         date_str, time_str, tz_str = date_parts
                         date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
-                        # Ζώνη ώρας υπάρχει, άρα την τοπικοποιούμε
-                        date = ny_tz.localize(date).replace(tzinfo=None)
-                        print(f"Date with timezone: {date} (Timezone: {tz_str})")
+                        date = ny_tz.localize(date)
+                        logger.debug(f"Date with timezone: {date} (Timezone: {tz_str})")
+                        # print(f"Date with timezone: {date} (Timezone: {tz_str})")
 
-                        # Αν υπάρχουν μόνο 2 μέρη, τότε δεν υπάρχει ζώνη ώρας
                     elif len(date_parts) == 2:
                         date_str, time_str = date_parts
                         date = datetime.strptime(f'{date_str} {time_str}', '%Y%m%d %H:%M:%S')
-                        # Δεν υπάρχει ζώνη ώρας, άρα το τοπικοποιούμε μόνο με βάση την ώρα Νέας Υόρκης
-                        date = ny_tz.localize(date).replace(tzinfo=None)
-                        print(f"Date without timezone: {date}")
+                        date = ny_tz.localize(date)
+                        # print(f"Date without timezone: {date}")
+                    self.db.insert_data_to_minute_table('minute_data', contract.symbol, date, bar.open, bar.high, bar.low,
+                                                    bar.close, bar.volume)
 
                 elif data_type == 'daily':
                     date_str = bar.date
@@ -108,9 +127,11 @@ class IBApi(EClient, EWrapper):
                     self.db.insert_data_to_daily_table('daily_data', contract.symbol, date, bar.open, bar.high, bar.low,
                                                        bar.close, bar.volume)
             else:
+                logger.error(f"No contract found for reqId: {reqId}")
                 print(f"No contract found for reqId: {reqId}")
 
         except ValueError as e:
+            logger.error(f"Error converting date: {e}")
             print(f"Error converting date: {e}")
 
     def insert_minute_data(self, ticker, date, bar):
@@ -124,6 +145,7 @@ class IBApi(EClient, EWrapper):
         )
 
     def historicalDataEnd(self, reqId, start, end):
+        logger.info("Historical data download complete")
         print("Historical data download complete")
         self.data_download_complete = True
         self.data_processor.data_ready_queue.put(self.data)
@@ -131,9 +153,11 @@ class IBApi(EClient, EWrapper):
     def get_reqId_for_contract(self, contract):
         for reqId, info in self.reqId_info.items():
             if info['contract'] == contract:
-                print(f"Found reqId {reqId} for contract {contract.symbol}")
+                logger.info(f"Found reqId {reqId} for contract {contract.symbol}")
+                # print(f"Found reqId {reqId} for contract {contract.symbol}")
                 return reqId
-        print(f"No reqId found for contract {contract.symbol}")
+        logger.warning(f"No reqId found for contract: {contract.symbol}")
+        # print(f"No reqId found for contract {contract.symbol}")
         return None
 
     def update_minute_data_for_symbol(self, contract):
@@ -141,12 +165,14 @@ class IBApi(EClient, EWrapper):
         # print(f"Processing historical data for reqId: {reqId}...")
 
         if reqId is None:
-            print(f"No reqId found for contract: {contract.symbol}")
+            logger.warning(f"No reqId found for contract: {contract.symbol}")
+            # print(f"No reqId found for contract: {contract.symbol}")
             return
 
         contract_info = self.reqId_info[reqId]
         data_type = contract_info['data_type']
-        print(f"Contract found: {contract.symbol}, data_type: {data_type}")
+        logger.info(f"Contract found: {contract.symbol}, data_type: {data_type}")
+        # print(f"Contract found: {contract.symbol}, data_type: {data_type}")
 
         last_date = self.db.get_last_date_for_symbol(contract.symbol)
         if last_date is None:
@@ -156,8 +182,8 @@ class IBApi(EClient, EWrapper):
             start_date = last_date.astimezone(ny_tz).strftime(
                 '%Y%m%d %H:%M:%S')
 
-        duration_str = "3 D"
-
+        duration_str = "1 D"
+        logger.info(f"Requesting historical data for {contract.symbol}, from {start_date}")
         self.reqHistoricalData(
             reqId=reqId,  # Χρησιμοποιήστε ένα μοναδικό reqId για κάθε αίτημα
             contract=contract,
@@ -221,20 +247,24 @@ class IBApi(EClient, EWrapper):
             return f"{minutes} M"
 
     def check_connection(self):
-        if not self.isConnected():  # Έλεγχος αν το API είναι συνδεδεμένο
-            print("API disconnected, attempting to reconnect...")
+        if not self.isConnected():
+            logger.warning("API disconnected, attempting to reconnect...")
+            # print("API disconnected, attempting to reconnect...")
             self.connect("127.0.0.1", 7497, 1)
             if self.isConnected():
-                print("Reconnected to API.")
+                logger.info("Reconnected to API.")
+                # print("Reconnected to API.")
                 sleep(2)
             else:
-                print("Failed to reconnect, setting stop_flag.")
+                logger.error("Failed to reconnect, setting stop_flag.")
+                # print("Failed to reconnect, setting stop_flag.")
     #             stop_flag.set()
 
     def tickPrice(self, reqId, tickType, price, attrib):
-        print(f"Tick Price for reqId {reqId}: {price}")
+        # print(f"Tick Price for reqId {reqId}: {price}")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
-        print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
+        # print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
+        logger.info(f'Tick Price. reqId: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
 
         if tickType == 4:  # Last
             with self.lock:
@@ -258,7 +288,8 @@ class IBApi(EClient, EWrapper):
                 if contract_info:
                     contract = contract_info['contract']
                     ticker = contract.symbol
-                    print(f"Found contract {ticker} for reqId {reqId}")
+                    logger.info(f"Found contract {ticker} for reqId {reqId}")
+                    # print(f"Found contract {ticker} for reqId {reqId}")
 
                     # Αποθήκευση των δεδομένων ως DataFrame
                     if ticker not in self.real_time_data:
@@ -281,18 +312,21 @@ class IBApi(EClient, EWrapper):
                                                     interval_entry=self.data_processor.interval_entry,
                                                     interval_exit=self.data_processor.interval_exit)
                 else:
-                    print(f"Contract not found for reqId: {reqId}")
+                    logger.warning(f"Contract not found for reqId: {reqId}")
+                    # print(f"Contract not found for reqId: {reqId}")
 
     def tickSize(self, reqId, tickType, size):
-        print(f"Tick Size for reqId {reqId}: {size}")
+        # print(f"Tick Size for reqId {reqId}: {size}")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
-        print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
+        # print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
+        logger.info(f'Tick Size. reqId: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
 
         contract_info = self.reqId_info.get(reqId)
         if contract_info:
             contract = contract_info['contract']
             ticker = contract.symbol
-            print(f"Found contract {ticker} for reqId {reqId}")
+            logger.info(f"Found contract {ticker} for reqId {reqId}")
+            # print(f"Found contract {ticker} for reqId {reqId}")
 
             if tickType == 5:  # Volume
                 with self.lock:
@@ -308,7 +342,6 @@ class IBApi(EClient, EWrapper):
                             'volume': size
                         }
 
-                    # Αποθήκευση των δεδομένων ως DataFrame
                     if ticker not in self.real_time_data:
                         self.real_time_data[ticker] = pd.DataFrame(
                             columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
@@ -325,12 +358,14 @@ class IBApi(EClient, EWrapper):
 
                     self.real_time_data[ticker] = pd.concat([self.real_time_data[ticker], new_row], ignore_index=True)
                     self.data_processor.data_ready_queue.put(self.real_time_data[ticker].iloc[-1])
-                    print(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
+                    logger.info(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
+                    # print(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
                     self.data_processor.update_plot(contract=contract,
                                                     interval_entry=self.data_processor.interval_entry,
                                                     interval_exit=self.data_processor.interval_exit)
         else:
-            print(f"Contract not found for reqId: {reqId}")
+            logger.warning(f"Contract not found for reqId: {reqId}")
+            # print(f"Contract not found for reqId: {reqId}")
 
     def create_order(self, orderId, action, orderType, quantity, limitPrice=None, auxPrice=None, outsideRth=False):
         order = Order()
@@ -344,7 +379,9 @@ class IBApi(EClient, EWrapper):
             order.lmtPrice = limitPrice
         if auxPrice is not None:
             order.auxPrice = auxPrice
-        print(f"Created order: {order}")
+        order.tif = "DAY"
+        logger.info(f"Created order: {order}")
+        # print(f"Created order: {order}")
         return order
 
     def create_bracket_order(self, parentOrderId, action, quantity, limit_price, profit_target, stop_loss,
@@ -370,16 +407,20 @@ class IBApi(EClient, EWrapper):
         stop_loss.parentId = parentOrderId
         stop_loss.transmit = True
 
-        # Print order details for debugging
-        print(f"Parent Order ID: {parentOrderId}, Action: {action}, Limit Price: {limit_price}")
-        print(f"Take Profit Order ID: {parentOrderId + 1}, Action: {take_profit_action}, Limit Price: {profit_target}")
-        print(f"Stop Loss Order ID: {parentOrderId + 2}, Action: {stop_loss_action}, Stop Price: {stop_loss}")
+        logger.info(f"Parent Order ID: {parentOrderId}, Action: {action}, Limit Price: {limit_price}")
+        logger.info(
+            f"Take Profit Order ID: {parentOrderId + 1}, Action: {take_profit_action}, Limit Price: {profit_target}")
+        logger.info(f"Stop Loss Order ID: {parentOrderId + 2}, Action: {stop_loss_action}, Stop Price: {stop_loss}")
+
+        # print(f"Parent Order ID: {parentOrderId}, Action: {action}, Limit Price: {limit_price}")
+        # print(f"Take Profit Order ID: {parentOrderId + 1}, Action: {take_profit_action}, Limit Price: {profit_target}")
+        # print(f"Stop Loss Order ID: {parentOrderId + 2}, Action: {stop_loss_action}, Stop Price: {stop_loss}")
 
         return [parent, take_profit, stop_loss]
 
     def place_bracket_order(self, contract, action, quantity, limit_price, profit_target, stop_loss, outside_rth=False):
         order_lock = threading.Lock()
-        with order_lock:  # Χρήση του κλειδώματος
+        with order_lock:
 
             try:
                 # retries = 3  # Μέγιστος αριθμός προσπαθειών
@@ -395,24 +436,27 @@ class IBApi(EClient, EWrapper):
 
                 for o in bracket:
                     if not self.check_connection():
-                        print("API disconnected before placing order. Attempting to reconnect.")
+                        logger.warning("API disconnected before placing order. Attempting to reconnect.")
+                        # print("API disconnected before placing order. Attempting to reconnect.")
                     self.placeOrder(o.orderId, contract, o)
-                    print(f"Placed order: {o.orderId} for contract: {contract.symbol}")
+                    logger.info(f"Placed order: {o.orderId} for contract: {contract.symbol}")
+                    # print(f"Placed order: {o.orderId} for contract: {contract.symbol}")
                     self.nextValidOrderId += 1
                     sleep(1)
-
                 return bracket
             except Exception as e:
-                print(f"Error placing bracket order: {str(e)}")
+                logger.error(f"Error placing bracket order: {str(e)}")
+                # print(f"Error placing bracket order: {str(e)}")
                 return None
 
     def cancel_open_order(self, order_id):
+        logger.info(f"Cancelling order ID: {order_id}")
         print(f"Cancelling order ID: {order_id}")
-        manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
-        self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
-        OrderManager.in_long_position = False
-        OrderManager.in_short_position = False
-        OrderManager.alert_active = False
+        # manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        # self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
+        # OrderManager.in_long_position = False
+        # OrderManager.in_short_position = False
+        # OrderManager.alert_active = False
 
     # def cancel_open_order(self, order_id):
     #     if order_id is None:
@@ -424,16 +468,18 @@ class IBApi(EClient, EWrapper):
         try:
             manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
             self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
+            logger.info(f"Order {order_id} cancelled successfully.")
             print(f"Order {order_id} cancelled successfully.")
 
-            # update flags here if this order is tied to an open position
             if order_id == self.entry_order_id:
                 OrderManager.in_long_position = False
                 OrderManager.in_short_position = False
                 OrderManager.alert_active = False
-                print(f"Flags updated after cancelling order {order_id}")
+                logger.info(f"Flags updated after cancelling order {order_id}")
+                # print(f"Flags updated after cancelling order {order_id}")
 
         except Exception as e:
+            logger.error(f"Failed to cancel order {order_id}: {e}")
             print(f"Failed to cancel order {order_id}: {e}")
 
     def create_contract(self, symbol, sec_type, exchange, currency, data_type, reqId=None):
@@ -446,11 +492,14 @@ class IBApi(EClient, EWrapper):
             reqId = self.current_reqId
             self.current_reqId += 1
 
-        # Αποθηκεύουμε το reqId και το data_type στο εξωτερικό λεξικό
         self.reqId_info[reqId] = {
             'contract': contract,
             'data_type': data_type
         }
+
+        logger.info(
+            f"Created contract for symbol: {symbol}, secType: {sec_type}, exchange: {exchange}, currency: {currency}")
+        logger.info(f"Assigned reqId: {reqId} for contract with symbol: {symbol}")
 
         return contract
     # def reset_reqId(self, start_value=1):
@@ -462,18 +511,21 @@ class IBApi(EClient, EWrapper):
                 _ = self.data_processor.data_ready_queue.get()
 
                 for contract_dict in self.contracts:
-                    contract = contract_dict['contract']  # Παίρνουμε το πραγματικό αντικείμενο Contract από το λεξικό
-                    if contract:  # Βεβαιωθείτε ότι το contract δεν είναι None
+                    contract = contract_dict['contract']
+                    if contract:
                         self.data_processor.update_plot(interval_entry=interval_entry,interval_exit=interval_exit, contract=contract)
                     else:
-                        print(f"Contract for reqId {contract_dict['reqId']} is not set.")
+                        logger.warning(f"Contract for reqId {contract_dict['reqId']} is not set.")
+                        # print(f"Contract for reqId {contract_dict['reqId']} is not set.")
 
     def order_main_thread_function(self, data_processor, interval_entry, interval_exit, contracts, order_manager, decision_queue,
                                decision_flag):
-        print(f"Received contracts: {contracts}")
+        logger.info(f"Received contracts: {contracts}")
+        # print(f"Received contracts: {contracts}")
 
         while True:
-            print("Running order main thread function")
+            logger.debug("Running order main thread function")
+            # print("Running order main thread function")
             sleep(1)
             combined_data_dict = {}
 
@@ -490,10 +542,12 @@ class IBApi(EClient, EWrapper):
                     # print(df_exit)
 
                     if df_entry.empty or df_exit.empty:
-                        print(f"Warning: Entry or Exit data for {symbol} is empty.")
+                        logger.warning(f"Entry or Exit data for {symbol} is empty.")
+                        # print(f"Warning: Entry or Exit data for {symbol} is empty.")
                     else:
-                        print(
-                            f"Data for {symbol} looks valid with {len(df_entry)} entry records and {len(df_exit)} exit records.")
+                        logger.info(f"Data for {symbol} looks valid with {len(df_entry)} entry records and {len(df_exit)} exit records.")
+                        # print(
+                        #     f"Data for {symbol} looks valid with {len(df_entry)} entry records and {len(df_exit)} exit records.")
 
                     combined_data_dict[symbol] = {'entry': df_entry, 'exit': df_exit}
 
@@ -506,24 +560,31 @@ class IBApi(EClient, EWrapper):
                 for symbol, data in combined_data_dict.items():
                     if isinstance(data['entry'], pd.DataFrame) and isinstance(data['exit'], pd.DataFrame):
                         if not data['entry'].empty and not data['exit'].empty:
-                            print(
-                                f"Processing signals for {symbol}. Entry has {len(data['entry'])} rows and Exit has {len(data['exit'])} rows.")
+                            logger.info(f"Processing signals for {symbol}. Entry has {len(data['entry'])} rows and Exit has {len(data['exit'])} rows.")
+                            # print(
+                            #     f"Processing signals for {symbol}. Entry has {len(data['entry'])} rows and Exit has {len(data['exit'])} rows.")
                             order_manager.process_signals_and_place_orders(data['entry'], data['exit'], decision_queue,
                                                                            decision_flag, symbol)
                         else:
-                            print(f"Warning: Entry or Exit data for {symbol} is empty.")
+                            logger.warning(f"Warning: Entry or Exit data for {symbol} is empty.")
+                            # print(f"Warning: Entry or Exit data for {symbol} is empty.")
                     else:
-                        print(
-                            f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")
+                        logger.error(f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")
+                        # print(
+                        #     f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")
             else:
-                print("No data to process signals.")
+                logger.warning("No data to process signals.")
+                # print("No data to process signals.")
 
             try:
-                decision_queue.get()  # timeoute=60
+                decision_queue.get()
+                logger.info("Decision queue is not empty, handling decision")
                 print("Decision queue is not empty, handling decision")
             except queue.Empty:
+                logger.warning("Decision queue is empty, no signals to process")
                 print("Decision queue is empty, no signals to process")
 
     def close_connection(self):
+        logger.info("Closing connection to IB API")
         self.disconnect() #Closes conn with IB API
         self.db.db_close_connection()

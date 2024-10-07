@@ -4,8 +4,17 @@ import threading
 import zipfile
 from datetime import datetime, timedelta
 import pandas as pd
-
 from order_manager import OrderManager
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("ib_api.log")]
+)
+logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
+
 
 class DataProcessor:
     def __init__(self, db, api_helper):
@@ -24,7 +33,7 @@ class DataProcessor:
         while not self.data_ready_queue.empty():
             data = self.data_ready_queue.get()
 
-            # Εκτύπωση για να δείτε τι επιστρέφει η ουρά
+            logger.info(f"Data fetched from queue: {data}")
             print(f"Data fetched from queue: {data}")
 
             if isinstance(data, pd.Series):
@@ -33,25 +42,24 @@ class DataProcessor:
             if isinstance(data, dict):
                 ticker = data.get('Ticker')
                 if not ticker:
-                    print("Ticker missing in data, skipping...")
+                    logger.warning("Ticker missing in data, skipping...")
+                    # print("Ticker missing in data, skipping...")
                     continue
 
-                # Βεβαιωθείτε ότι τα δεδομένα περιέχουν όλες τις απαραίτητες στήλες
                 required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker']
                 missing_columns = [col for col in required_columns if col not in data]
                 if missing_columns:
-                    print(f"Missing columns in data for {ticker}: {missing_columns}")
+                    logger.warning(f"Missing columns in data for {ticker}: {missing_columns}")
+                    # print(f"Missing columns in data for {ticker}: {missing_columns}")
                     continue
 
-                # Δημιουργία νέας γραμμής ως DataFrame
                 new_row = pd.DataFrame([data], columns=required_columns)
 
-                # Προσθήκη της νέας γραμμής στο ενιαίο DataFrame
                 self.real_time_data = pd.concat([self.real_time_data, new_row], ignore_index=True)
 
-                # Εκτύπωση του DataFrame μετά την προσθήκη
-                print(f"Updated DataFrame with new data:")
-                print(self.real_time_data.tail())
+                logger.debug(f"Updated DataFrame with new data: {self.real_time_data.tail()}")
+                # print(f"Updated DataFrame with new data:")
+                # print(self.real_time_data.tail())
 
         return self.real_time_data
 
@@ -61,6 +69,7 @@ class DataProcessor:
     @staticmethod
     def calculate_indicators(df):
         if len(df) < 200:
+            logger.warning("Not enough data to calculate indicators")
             print("Not enough data to calculate indicators")
             return df
 
@@ -87,12 +96,14 @@ class DataProcessor:
         columns_to_remove = ['SMA20', 'Typical_Price', 'Cumulative_Typical_Price_Volume', 'Cumulative_Volume']
         df = df.drop(columns=[col for col in columns_to_remove if col in df])
 
+        logger.info("Indicators calculated successfully.")
         return df
 
     def generate_signals(self, df):
         required_columns = ['EMA9', 'EMA20', 'EMA200', 'VWAP', 'MACD', 'MACD_Signal', 'BB_Upper', 'BB_Lower']
         for col in required_columns:
             if col not in df.columns:
+                logger.warning(f"Not enough data to calculate {col}")
                 print(f"Not enough data to calculate {col}")
                 return df
 
@@ -256,13 +267,16 @@ class DataProcessor:
                         self.order_manager.close_short_position()
 
             except KeyError as e:
-                print(f"KeyError at index {i}: {e}, skipping this index.")
+                logger.error(f"KeyError at index {i}: {e}, skipping this index.")
+                # print(f"KeyError at index {i}: {e}, skipping this index.")
                 continue
 
             except Exception as e:
-                print(f"Unexpected error at index {i}: {e}, skipping this index.")
+                logger.error(f"Unexpected error at index {i}: {e}, skipping this index.")
+                # print(f"Unexpected error at index {i}: {e}, skipping this index.")
                 continue
 
+        logger.info("Signal generation completed.")
         return df
 
     def validate_interval(self, user_input):
@@ -272,7 +286,8 @@ class DataProcessor:
         elif not user_input:  # if user_input is empty or None
             return None
         else:
-            print(f"Invalid interval '{user_input}', using no interval.")
+            logger.warning(f"Invalid interval '{user_input}', using no interval.")
+            # print(f"Invalid interval '{user_input}', using no interval.")
             return None
 
     @staticmethod
@@ -286,13 +301,14 @@ class DataProcessor:
             'Ticker': 'first'
         }).dropna().reset_index()
 
+        logger.info("Resampling Complete")
         return resampled_df
 
     def update_plot(self, contract, days=7,  interval_entry=None, interval_exit=None):
         real_time_data = self.process_queue_data()
-        # Εκτύπωση της λίστας real_time_data πριν τη δημιουργία της DataFrame
-        print("Real-time Data List:")
-        print(self.real_time_data)
+        logger.debug(f"Real-time Data List: {self.real_time_data}")
+        # print("Real-time Data List:")
+        # print(self.real_time_data)
 
         end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
@@ -300,8 +316,11 @@ class DataProcessor:
         df_minute = self.fetch_data_from_db('minute_data', start_date, end_date, ticker=contract.symbol)
         df_minute.set_index('Date', inplace=True)
 
-        # print("Minute data from DB:")
-        # print(df_minute.tail())
+        logger.debug("Minute data from DB:")
+        logger.debug(df_minute.tail())
+
+        print("Minute data from DB:")
+        print(df_minute.tail())
         #
         # print("Minute data DataFrame with datetime check:")
         # print(df_minute.dtypes)
@@ -311,8 +330,11 @@ class DataProcessor:
                                     columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker'])
         real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
 
-        print("Real time df: ")
-        print(real_time_df)
+        logger.debug(f"Real-time DataFrame for {ticker}:")
+        logger.debug(real_time_df)
+
+        # print("Real time df: ")
+        # print(real_time_df)
 
         # print("Real-time DataFrame with datetime check:")
         # print(real_time_df.dtypes)
@@ -321,25 +343,31 @@ class DataProcessor:
         # print(real_time_df)
 
         if 'Date' in real_time_df.columns:
-            real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')  # Βεβαιώσου ότι είναι datetime
+            real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
             real_time_df.set_index('Date', inplace=True)
-            print("Valid real-time data found, DataFrame created:")
-            print(real_time_df)
+            logger.debug(f"Valid real-time data found, DataFrame created for {ticker}")
+            # print("Valid real-time data found, DataFrame created:")
+            # print(real_time_df)
         else:
-            print("Column 'Date' is missing, cannot set as index")
-            print(real_time_df.columns)
+            logger.error(f"Column 'Date' is missing for {ticker}, cannot set as index")
+            logger.error(real_time_df.columns)
+            # print("Column 'Date' is missing, cannot set as index")
+            # print(real_time_df.columns)
 
-        print("Valid real-time data found, DataFrame created:")
-        print(real_time_df)
+        logger.info(f"Processing real-time data for ticker: {ticker}")
+        # print("Valid real-time data found, DataFrame created:")
+        # print(real_time_df)
 
         # Εκτύπωση των real-time δεδομένων για έλεγχο
         # print("Real-time DataFrame before combining:")
         # print(real_time_df.tail())
 
         # filtered with ticker
-        print("Filtered with ticker")
+        # print("Filtered with ticker")
         real_time_df_filtered = real_time_df[real_time_df['Ticker'] == ticker]
-        print(real_time_df_filtered.tail())
+        logger.debug(f"Filtered real-time data for {ticker}:")
+        logger.debug(real_time_df_filtered.tail())
+        # print(real_time_df_filtered.tail())
 
         dataframes_to_concat = [df for df in [df_minute, real_time_df_filtered] if not df.empty]
         combined_data = pd.concat(dataframes_to_concat)
@@ -351,8 +379,10 @@ class DataProcessor:
                 combined_data['Date'] = pd.to_datetime(combined_data['Date'], errors='coerce')
                 combined_data.set_index('Date', inplace=True)
                 combined_data.sort_values(by='Date', inplace=True)
-                print('Combined Data')
-                print(combined_data.tail())
+                logger.info(f"Combined Data for {ticker}:")
+                logger.debug(combined_data.tail())
+                # print('Combined Data')
+                # print(combined_data.tail())
 
             # Resample and process for entry signals
             # print("Df_entry resampling")
@@ -385,6 +415,11 @@ class DataProcessor:
             #
             # print(f"Entry {interval_entry} Data with Signals:")
             # print(df_entry.tail())
+            logger.info(f"Entry {interval_entry} Data for {contract.symbol} with Signals:")
+            logger.debug(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
+
+            logger.info(f"Exit {interval_exit} Data for {contract.symbol} with Signals:")
+            logger.debug(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
 
             # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
             print(
@@ -402,6 +437,7 @@ class DataProcessor:
             return df_entry, df_exit
 
         else:
+            logger.warning(f"No data to process for {ticker}.")
             print("No data to process.")
             return None
 
@@ -425,7 +461,8 @@ class DataProcessor:
                         # Γράφουμε κάθε DataFrame σε ξεχωριστό φύλλο στο Excel, με το όνομα του ticker ως το όνομα του φύλλου
                         df.to_excel(writer, sheet_name=ticker, index=False)
 
-                print(f"Data appended successfully to {filename}")
+                logger.info(f"Data appended successfully to {filename}")
+                # print(f"Data appended successfully to {filename}")
             else:
                 # Δημιουργία αρχείου αν δεν υπάρχει
                 with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
@@ -437,10 +474,12 @@ class DataProcessor:
                         # Γράφουμε κάθε DataFrame σε ξεχωριστό φύλλο στο Excel, με το όνομα του ticker ως το όνομα του φύλλου
                         df.to_excel(writer, sheet_name=ticker, index=False)
 
-                print(f"Data exported successfully to {filename}")
+                logger.info(f"Data exported successfully to {filename}")
+                # print(f"Data exported successfully to {filename}")
 
         except zipfile.BadZipFile:
-            print(f"BadZipFile error occurred. Deleting corrupted file {filename} and trying again.")
+            logger.error(f"BadZipFile error occurred. Deleting corrupted file {filename} and trying again.")
+            # print(f"BadZipFile error occurred. Deleting corrupted file {filename} and trying again.")
             os.remove(filename)
             self.export_to_excel(dict_of_dfs, filename)
 

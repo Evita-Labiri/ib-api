@@ -1,10 +1,19 @@
 import os
 from datetime import datetime
-
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("ib_api.log")]
+)
+logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
+
 
 class Database:
     def __init__(self):
@@ -18,18 +27,21 @@ class Database:
 
     def create_engine(self):
         try:
-            connection_string = f"mysql+mysqlconnector://{os.getenv('STOCKDATADB_UN')}:{os.getenv('STOCKDATADB_PASS')}@100.64.0.21/stockdatadb"
-            # connection_string = f"mysql+mysqlconnector://{os.getenv('STOCKDATADB_UN')}:{os.getenv('STOCKDATADB_PASS')}@localhost/stockdatadb"
+            # connection_string = f"mysql+mysqlconnector://{os.getenv('STOCKDATADB_UN')}:{os.getenv('STOCKDATADB_PASS')}@100.64.0.21/stockdatadb"
+            connection_string = f"mysql+mysqlconnector://{os.getenv('STOCKDATADB_UN')}:{os.getenv('STOCKDATADB_PASS')}@localhost/stockdatadb"
             engine = create_engine(connection_string, connect_args={'connect_timeout': 28800})
-            print("Successfully connected to the database with SQLAlchemy")
+            logger.info("Database session initialized.")
+            # print("Successfully connected to the database with SQLAlchemy")
             return engine
         except Exception as e:
-            print(f"Error while connecting to the database with SQLAlchemy: {e}")
+            logger.error(f"Error while connecting to the database with SQLAlchemy: {e}")
+            # print(f"Error while connecting to the database with SQLAlchemy: {e}")
             return None
 
     def ensure_connection(self):
         try:
             if self.engine is None:
+                logger.warning("Database engine is not available, reconnecting...")
                 print("Database engine is not available, reconnecting...")
                 self.engine = self.create_engine()
                 if self.engine:
@@ -37,15 +49,19 @@ class Database:
                     self.session = self.Session()
 
             if self.session is None:
+                logger.warning("Database session is not available, creating a new session...")
                 print("Database session is not available, creating a new session...")
                 self.session = self.Session()
 
             if self.session and not self.session.is_active:
+                logger.warning("Database session is not active, creating a new session...")
                 print("Database session is not active, creating a new session...")
                 self.session = self.Session()
             else:
+                logger.info("Database session is active and connected.")
                 print("Database session is active and connected.")
         except SQLAlchemyError as e:
+            logger.error(f"Error ensuring connection: {e}")
             print(f"Error ensuring connection: {e}")
             if self.session:
                 self.session.rollback()
@@ -70,7 +86,9 @@ class Database:
                     'volume': row['volume']
                 })
                 self.session.commit()
+                logger.info(f"Inserted data into {table_name} for ticker {row['ticker']} at {row['datetime']}")
             except SQLAlchemyError as e:
+                logger.error(f"Error inserting data into {table_name}: {e}")
                 print(f"Error inserting data into {table_name}: {e}")
                 self.session.rollback()
 
@@ -89,7 +107,8 @@ class Database:
                 insert_ticker_query = text("INSERT INTO companies (ticker) VALUES (:ticker)")
                 self.session.execute(insert_ticker_query, {'ticker': ticker})
                 self.session.commit()
-                print(f"Ticker {ticker} inserted into companies table.")
+                logger.info(f"Ticker {ticker} inserted into companies table.")
+                # print(f"Ticker {ticker} inserted into companies table.")
 
             query = text(f"SELECT COUNT(*) FROM {table_name} WHERE ticker = :ticker AND date_time = :date_time")
             result = self.session.execute(query, {
@@ -114,10 +133,13 @@ class Database:
                     'volume': volume
                 })
                 self.session.commit()
+                logger.info(f"Data inserted into {table_name} for ticker {ticker} at {date}")
                 print("Data inserted")
             else:
-                print(f"Duplicate minute data found for {ticker} at {date}, skipping insertion.")
+                logger.warning(f"Duplicate minute data found for {ticker} at {date}, skipping insertion.")
+                # print(f"Duplicate minute data found for {ticker} at {date}, skipping insertion.")
         except SQLAlchemyError as e:
+            logger.error(f"Error inserting minute data into {table_name}: {e}")
             print(f"Error inserting minute data into {table_name}: {e}")
             self.session.rollback()
 
@@ -148,11 +170,14 @@ class Database:
                     'volume': volume
                 })
                 self.session.commit()
+                logger.info("Data inserted")
                 print("Data inserted")
             else:
-                print(f"Duplicate daily data found for {ticker} at {date}, skipping insertion.")
+                logger.warning(f"Duplicate daily data found for {ticker} at {date}, skipping insertion.")
+                # print(f"Duplicate daily data found for {ticker} at {date}, skipping insertion.")
         except SQLAlchemyError as e:
-            print(f"Error inserting daily data into {table_name}: {e}")
+            logger.error(f"Error inserting daily data into {table_name}: {e}")
+            # print(f"Error inserting daily data into {table_name}: {e}")
             self.session.rollback()
 
     def fetch_data_from_db(self, table_name, start_date=None, end_date=None, ticker=None):
@@ -171,8 +196,10 @@ class Database:
 
         try:
             df = pd.read_sql(query, self.engine)
+            logger.info(f"Data fetched successfully from {table_name}")
             return df
         except Exception as e:
+            logger.error(f"Error fetching data from MySQL table {table_name}: {e}")
             print(f"Error fetching data from MySQL table {table_name}: {e}")
             return pd.DataFrame()
 
@@ -180,9 +207,11 @@ class Database:
         query = f"SHOW COLUMNS FROM {table_name}"
         try:
             columns = pd.read_sql(query, self.engine)
+            logger.info(f"Fetched columns from {table_name}: {columns['Field'].tolist()}")
             # print(f"Columns in {table_name}: {columns['Field'].tolist()}")
             return columns['Field'].tolist()
         except Exception as e:
+            logger.error(f"Error fetching columns from table {table_name}: {e}")
             print(f"Error fetching columns from table {table_name}: {e}")
             return []
 
@@ -192,22 +221,29 @@ class Database:
             query = text(f"TRUNCATE TABLE {table_name}")
             self.session.execute(query)
             self.session.commit()
+            logger.info(f"All data from {table_name} has been deleted.")
             print(f"All data from {table_name} has been deleted.")
         except SQLAlchemyError as e:
+            logger.error(f"Error deleting data from {table_name}: {e}")
             print(f"Error deleting data from {table_name}: {e}")
             self.session.rollback()
 
     def update_data_in_db(self, df, table_name, temp_table_name):
-        df.to_sql(temp_table_name, self.engine, if_exists='replace', index=False)
-        # print("Data saved to temporary table successfully")
+        try:
+            df.to_sql(temp_table_name, self.engine, if_exists='replace', index=False)
+            logger.info(f"Data saved to temporary table {temp_table_name} successfully.")
+            # print("Data saved to temporary table successfully")
 
-        with self.engine.begin() as conn:
-            conn.execute(text(f"""
-                UPDATE {table_name} t
-                JOIN {temp_table_name} temp ON t.id = temp.id
-                SET t.date_time = temp.date_time
-            """))
-        print("Data updated successfully")
+            with self.engine.begin() as conn:
+                conn.execute(text(f"""
+                    UPDATE {table_name} t
+                    JOIN {temp_table_name} temp ON t.id = temp.id
+                    SET t.date_time = temp.date_time
+                """))
+            logger.info(f"Data updated successfully in {table_name}.")
+            print("Data updated successfully")
+        except SQLAlchemyError as e:
+            logger.error(f"Error updating data in {table_name}: {e}")
 
     def load_data_from_db(self, table_name):
         # print(f"Attempting to load data from table: {table_name}")
@@ -216,9 +252,11 @@ class Database:
 
         try:
             df = pd.read_sql(query, self.engine)
-            print("Data loaded successfully")
+            logger.info(f"Data loaded successfully from {table_name}.")
+            # print("Data loaded successfully")
             return df
         except Exception as e:
+            logger.error(f"Error loading data from {table_name}: {e}")
             print(f"Error loading data: {e}")
             return pd.DataFrame()
 
@@ -233,19 +271,62 @@ class Database:
                         LIMIT 1
                     """),
                     {"ticker": ticker}
-                ).scalar()
+                ).first()
+            if result:
+                date_time_value = result[0]  # Πρώτη στήλη από το αποτέλεσμα
+                if isinstance(date_time_value, int):  # Αν είναι timestamp
+                    date_time_value = datetime.fromtimestamp(date_time_value)
+                elif isinstance(date_time_value, str):  # Αν είναι string
+                    date_time_value = datetime.strptime(date_time_value, '%Y-%m-%d %H:%M:%S')
 
-            if isinstance(result, int):
-                result = datetime.fromtimestamp(result)
-            elif isinstance(result, str):
-                result = datetime.strptime(result, '%Y-%m-%d %H:%M:%S')
-
-            return result
+                logger.info(f"Last date for symbol {ticker} fetched successfully.")
+                return date_time_value
+            else:
+                logger.info(f"No data found for symbol {ticker}.")
+                return None
 
         except Exception as e:
+            logger.error(f"Error fetching last record for {ticker}: {e}")
             print(f"Error fetching last record for {ticker}: {e}")
             return None
 
+        #     if isinstance(result, int):
+        #         result = datetime.fromtimestamp(result)
+        #     elif isinstance(result, str):
+        #         result = datetime.strptime(result, '%Y-%m-%d %H:%M:%S')
+        #
+        #     logger.info(f"Last date for symbol {ticker} fetched successfully.")
+        #     return result
+        #
+        # except Exception as e:
+        #     logger.error(f"Error fetching last record for {ticker}: {e}")
+        #     print(f"Error fetching last record for {ticker}: {e}")
+        #     return None
+
+    def get_tickers_from_db(self):
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        query = text("SELECT ticker FROM daily_tickers WHERE date = :current_date")
+        try:
+            with self.engine.connect() as connection:
+                result = connection.execute(query, {"current_date": current_date})
+                tickers = [row[0] for row in result]
+
+                if tickers:
+                    for ticker in tickers:
+                        print(f"Ticker: {ticker}")
+                        logger.info(f"Fetched ticker: {ticker}")
+                else:
+                    print("No tickers found.")
+                    logger.info(f"No tickers found for date {current_date}")
+
+                return tickers
+
+        except Exception as e:
+            logger.error(f"Error fetching tickers for date {current_date}: {e}")
+            print(f"Error fetching tickers for date {current_date}: {e}")
+            return []
+
     def db_close_connection(self):
         self.session.close()
+        logger.info("Database connection closed.")
         print("Database connection closed")
