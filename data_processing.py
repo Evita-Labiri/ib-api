@@ -29,38 +29,62 @@ class DataProcessor:
         self.order_manager = OrderManager()
         self.lock = threading.Lock()
 
+    # def process_queue_data(self):
+    #     while not self.data_ready_queue.empty():
+    #         data = self.data_ready_queue.get()
+    #
+    #         logger.info(f"Data fetched from queue: {data}")
+    #         print(f"Data fetched from queue: {data}")
+    #
+    #         if isinstance(data, pd.Series):
+    #             data = data.to_dict()
+    #
+    #         if isinstance(data, dict):
+    #             ticker = data.get('Ticker')
+    #             if not ticker:
+    #                 logger.warning("Ticker missing in data, skipping...")
+    #                 # print("Ticker missing in data, skipping...")
+    #                 continue
+    #
+    #             required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker']
+    #             missing_columns = [col for col in required_columns if col not in data]
+    #             if missing_columns:
+    #                 logger.warning(f"Missing columns in data for {ticker}: {missing_columns}")
+    #                 # print(f"Missing columns in data for {ticker}: {missing_columns}")
+    #                 continue
+    #
+    #             new_row = pd.DataFrame([data], columns=required_columns)
+    #
+    #             self.real_time_data = pd.concat([self.real_time_data, new_row], ignore_index=True)
+    #
+    #             logger.debug(f"Updated DataFrame with new data: {self.real_time_data.tail()}")
+    #             # print(f"Updated DataFrame with new data:")
+    #             # print(self.real_time_data.tail())
+    #         return self.real_time_data
+
     def process_queue_data(self):
         while not self.data_ready_queue.empty():
             data = self.data_ready_queue.get()
-
             logger.info(f"Data fetched from queue: {data}")
             print(f"Data fetched from queue: {data}")
 
             if isinstance(data, pd.Series):
                 data = data.to_dict()
-
             if isinstance(data, dict):
                 ticker = data.get('Ticker')
                 if not ticker:
                     logger.warning("Ticker missing in data, skipping...")
-                    # print("Ticker missing in data, skipping...")
                     continue
 
                 required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker']
                 missing_columns = [col for col in required_columns if col not in data]
                 if missing_columns:
                     logger.warning(f"Missing columns in data for {ticker}: {missing_columns}")
-                    # print(f"Missing columns in data for {ticker}: {missing_columns}")
                     continue
 
                 new_row = pd.DataFrame([data], columns=required_columns)
-
                 self.real_time_data = pd.concat([self.real_time_data, new_row], ignore_index=True)
-
                 logger.debug(f"Updated DataFrame with new data: {self.real_time_data.tail()}")
-                # print(f"Updated DataFrame with new data:")
-                # print(self.real_time_data.tail())
-
         return self.real_time_data
 
     def fetch_data_from_db(self, table_name, start_date=None, end_date=None, ticker=None):
@@ -416,10 +440,10 @@ class DataProcessor:
             # print(f"Entry {interval_entry} Data with Signals:")
             # print(df_entry.tail())
             logger.info(f"Entry {interval_entry} Data for {contract.symbol} with Signals:")
-            logger.debug(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
+            logger.debug("\n" + df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]).to_string())
 
             logger.info(f"Exit {interval_exit} Data for {contract.symbol} with Signals:")
-            logger.debug(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
+            logger.debug("\n" + df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]).to_string())
 
             # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
             print(

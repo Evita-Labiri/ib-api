@@ -177,7 +177,6 @@ class OrderManager:
             # print(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
             return
 
-        # Ελέγχουμε αν υπάρχει ενεργή ειδοποίηση για το σύμβολο
         if self.alert_active.get(contract_symbol, False):
             logger.info(f"Alert already active for {contract_symbol}, skipping.")
             # print(f"Alert already active for {contract_symbol}, skipping.")

@@ -2,7 +2,7 @@ import queue
 
 import pandas as pd
 import pytz
-from time import sleep
+from time import sleep, time
 from datetime import datetime
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
@@ -183,7 +183,7 @@ class IBApi(EClient, EWrapper):
             start_date = last_date.astimezone(ny_tz).strftime(
                 '%Y%m%d %H:%M:%S')
 
-        duration_str = "1 D"
+        duration_str = "5 D"
         logger.info(f"Requesting historical data for {contract.symbol}, from {start_date}")
         self.reqHistoricalData(
             reqId=reqId,  # Χρησιμοποιήστε ένα μοναδικό reqId για κάθε αίτημα
@@ -309,9 +309,11 @@ class IBApi(EClient, EWrapper):
 
                     self.real_time_data[ticker] = pd.concat([self.real_time_data[ticker], new_row], ignore_index=True)
                     self.data_processor.data_ready_queue.put(self.real_time_data[ticker].iloc[-1])
-                    self.data_processor.update_plot(contract=contract,
-                                                    interval_entry=self.data_processor.interval_entry,
-                                                    interval_exit=self.data_processor.interval_exit)
+                    # self.data_processor.update_plot(contract=contract,
+                    #                                 interval_entry=self.data_processor.interval_entry,
+                    #                                 interval_exit=self.data_processor.interval_exit)
+
+
                 else:
                     logger.warning(f"Contract not found for reqId: {reqId}")
                     # print(f"Contract not found for reqId: {reqId}")
@@ -361,9 +363,9 @@ class IBApi(EClient, EWrapper):
                     self.data_processor.data_ready_queue.put(self.real_time_data[ticker].iloc[-1])
                     logger.info(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
                     # print(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
-                    self.data_processor.update_plot(contract=contract,
-                                                    interval_entry=self.data_processor.interval_entry,
-                                                    interval_exit=self.data_processor.interval_exit)
+                    # self.data_processor.update_plot(contract=contract,
+                    #                                 interval_entry=self.data_processor.interval_entry,
+                    #                                 interval_exit=self.data_processor.interval_exit)
         else:
             logger.warning(f"Contract not found for reqId: {reqId}")
             # print(f"Contract not found for reqId: {reqId}")
@@ -522,41 +524,32 @@ class IBApi(EClient, EWrapper):
     def order_main_thread_function(self, data_processor, interval_entry, interval_exit, contracts, order_manager, decision_queue,
                                decision_flag):
         logger.info(f"Received contracts: {contracts}")
-        # print(f"Received contracts: {contracts}")
 
+        # print(f"Received contracts: {contracts}")
         while True:
             logger.debug("Running order main thread function")
             # print("Running order main thread function")
-            sleep(1)
             combined_data_dict = {}
-
             for contract_dict in contracts:
                 contract = contract_dict['contract']
                 if contract:
                     symbol = contract.symbol
                     df_entry, df_exit = data_processor.update_plot(interval_entry=interval_entry,
                                                                    interval_exit=interval_exit, contract=contract)
-
-                    # print(f"Entry DataFrame for {symbol}:")
-                    # print(df_entry)
-                    # print(f"Exit DataFrame for {symbol}:")
-                    # print(df_exit)
-
-                    if df_entry.empty or df_exit.empty:
-                        logger.warning(f"Entry or Exit data for {symbol} is empty.")
-                        # print(f"Warning: Entry or Exit data for {symbol} is empty.")
-                    else:
-                        logger.info(f"Data for {symbol} looks valid with {len(df_entry)} entry records and {len(df_exit)} exit records.")
-                        # print(
-                        #     f"Data for {symbol} looks valid with {len(df_entry)} entry records and {len(df_exit)} exit records.")
-
+                    # if df_entry.empty or df_exit.empty:
+                    #     logger.warning(f"Entry or Exit data for {symbol} is empty.")
+                    #     # print(f"Warning: Entry or Exit data for {symbol} is empty.")
+                    # else:
+                    #     logger.info(f"Data for {symbol} looks valid with {len(df_entry)} entry records and {len(df_exit)} exit records.")
+                    #     # print(
+                    #     #     f"Data for {symbol} looks valid with {len(df_entry)} entry records and {len(df_exit)} exit records.")
                     combined_data_dict[symbol] = {'entry': df_entry, 'exit': df_exit}
-
                 else:
                     print(f"Contract for reqId {contract_dict['reqId']} is not set.")
 
             if combined_data_dict:
-                order_manager.wait_for_market_time()
+                print("Checking comb data dict")
+                # order_manager.wait_for_market_time()
                 # print(f"Combined data dictionary: {combined_data_dict}")
                 for symbol, data in combined_data_dict.items():
                     if isinstance(data['entry'], pd.DataFrame) and isinstance(data['exit'], pd.DataFrame):
@@ -572,13 +565,12 @@ class IBApi(EClient, EWrapper):
                     else:
                         logger.error(f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")
                         # print(
-                        #     f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")
-            else:
+                        #     f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")                else:
                 logger.warning("No data to process signals.")
                 # print("No data to process signals.")
 
             try:
-                decision_queue.get()
+                decision_queue.get(timeout=1)
                 logger.info("Decision queue is not empty, handling decision")
                 print("Decision queue is not empty, handling decision")
             except queue.Empty:
