@@ -340,8 +340,8 @@ class DataProcessor:
         df_minute = self.fetch_data_from_db('minute_data', start_date, end_date, ticker=contract.symbol)
         df_minute.set_index('Date', inplace=True)
 
-        logger.debug("Minute data from DB:")
-        logger.debug(df_minute.tail())
+        logger.info("Minute data from DB:")
+        logger.info(df_minute.tail())
 
         print("Minute data from DB:")
         print(df_minute.tail())
@@ -404,7 +404,7 @@ class DataProcessor:
                 combined_data.set_index('Date', inplace=True)
                 combined_data.sort_values(by='Date', inplace=True)
                 logger.info(f"Combined Data for {ticker}:")
-                logger.debug(combined_data.tail())
+                logger.info(combined_data.tail())
                 # print('Combined Data')
                 # print(combined_data.tail())
 
@@ -415,6 +415,7 @@ class DataProcessor:
 
             # print("Df_entry indicators")
             df_entry = self.calculate_indicators(df_entry)
+            logger.info(df_entry.tail())
             # print(df_entry.tail())
 
             # print("Df_entry signals")
@@ -428,9 +429,9 @@ class DataProcessor:
 
             # print("Df_exit indicators")
             df_exit = self.calculate_indicators(df_exit)
-            # print(df_exit.tail())
-
+            logger.info(df_exit.tail())
             # print("Df_exit signals")
+
             df_exit = self.generate_signals(df_exit)
             # print(df_exit.tail())
 
@@ -440,10 +441,10 @@ class DataProcessor:
             # print(f"Entry {interval_entry} Data with Signals:")
             # print(df_entry.tail())
             logger.info(f"Entry {interval_entry} Data for {contract.symbol} with Signals:")
-            logger.debug("\n" + df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]).to_string())
+            logger.info("\n" + df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]).tail(10).to_string())
 
             logger.info(f"Exit {interval_exit} Data for {contract.symbol} with Signals:")
-            logger.debug("\n" + df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]).to_string())
+            logger.info("\n" + df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]).tail(10).to_string())
 
             # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
             print(
