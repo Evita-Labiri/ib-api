@@ -415,7 +415,7 @@ class DataProcessor:
 
             # print("Df_entry indicators")
             df_entry = self.calculate_indicators(df_entry)
-            logger.info(df_entry.tail())
+            logger.info("\n" + df_entry.tail(20).to_string())
             # print(df_entry.tail())
 
             # print("Df_entry signals")
@@ -429,7 +429,7 @@ class DataProcessor:
 
             # print("Df_exit indicators")
             df_exit = self.calculate_indicators(df_exit)
-            logger.info(df_exit.tail())
+            logger.info("\n" + df_exit.tail(20).to_string())
             # print("Df_exit signals")
 
             df_exit = self.generate_signals(df_exit)
@@ -455,9 +455,8 @@ class DataProcessor:
             print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
             print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
 
-            # with self.lock:
-            #     self.export_to_excel({f'{contract.symbol}_entry': df_entry}, filename=f"signals_{interval_entry}.xlsx")
-            #     self.export_to_excel({f'{contract.symbol}_exit': df_exit}, filename=f"signals_{interval_exit}.xlsx")
+            # self.export_to_excel({f'{contract.symbol}_entry': df_entry}, filename=f"signals_{interval_entry}.xlsx")
+            # self.export_to_excel({f'{contract.symbol}_exit': df_exit}, filename=f"signals_{interval_exit}.xlsx")
 
             return df_entry, df_exit
 
@@ -474,38 +473,22 @@ class DataProcessor:
     #     df.to_excel(filename, index=False)
 
     def export_to_excel(self, dict_of_dfs, filename="output.xlsx"):
+        temp_data = {}
+        for ticker, df in dict_of_dfs.items():
+            if 'Date' in df.columns:
+                df['Date'] = df['Date'].dt.tz_localize(None)
+            temp_data[ticker] = df
         try:
             if os.path.exists(filename):
-                # Χρήση ExcelWriter με mode 'a' για append και engine 'openpyxl' για να μην διαγράφονται τα παλιά φύλλα
-                with pd.ExcelWriter(filename, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-                    for ticker, df in dict_of_dfs.items():
-                        # Καθαρίζουμε τη στήλη Date
-                        if 'Date' in df.columns:
-                            df['Date'] = df['Date'].dt.tz_localize(None)
+                os.remove(filename)
 
-                        # Γράφουμε κάθε DataFrame σε ξεχωριστό φύλλο στο Excel, με το όνομα του ticker ως το όνομα του φύλλου
-                        df.to_excel(writer, sheet_name=ticker, index=False)
+            with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+                for ticker, df in temp_data.items():
+                    df.to_excel(writer, sheet_name=ticker, index=False)
 
-                logger.info(f"Data appended successfully to {filename}")
-                # print(f"Data appended successfully to {filename}")
-            else:
-                # Δημιουργία αρχείου αν δεν υπάρχει
-                with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
-                    for ticker, df in dict_of_dfs.items():
-                        # Καθαρίζουμε τη στήλη Date
-                        if 'Date' in df.columns:
-                            df['Date'] = df['Date'].dt.tz_localize(None)
+            logger.info(f"Data exported successfully to {filename}")
+        except Exception as e:
+            logger.error(f"Error writing to Excel: {str(e)}")
 
-                        # Γράφουμε κάθε DataFrame σε ξεχωριστό φύλλο στο Excel, με το όνομα του ticker ως το όνομα του φύλλου
-                        df.to_excel(writer, sheet_name=ticker, index=False)
-
-                logger.info(f"Data exported successfully to {filename}")
-                # print(f"Data exported successfully to {filename}")
-
-        except zipfile.BadZipFile:
-            logger.error(f"BadZipFile error occurred. Deleting corrupted file {filename} and trying again.")
-            # print(f"BadZipFile error occurred. Deleting corrupted file {filename} and trying again.")
-            os.remove(filename)
-            self.export_to_excel(dict_of_dfs, filename)
 
 

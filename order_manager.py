@@ -297,15 +297,11 @@ class OrderManager:
             try:
                 logger.info("Waiting for signal from queue...")
                 print("Waiting for signal from queue...")
-                # signal = decision_queue.get(timeout=120)
-                signal = decision_queue.get(timeout=60)
+                signal = decision_queue.get(timeout=30)
                 logger.info(f"Signal received from queue: {signal}")
                 print(f"Signal received from queue: {signal}")
 
-                if not self.wait_for_market_time():
-                    logger.warning("Market not ready for order placement yet (less than 10 minutes after open). Skipping order.")
-                    print("Market not ready for order placement yet (less than 10 minutes after open). Skipping order.")
-                    continue
+                self.wait_for_market_time()
 
                 contract_symbol, action, index, close_price, timestamp = signal
                 logger.info(f"Handling decision: {signal}")
@@ -454,7 +450,6 @@ class OrderManager:
                             # print(f"Failed to place exit orders for {contract_symbol}.")
                             self.alert_active[contract_symbol] = False
                 decision_flag.set()
-
             except Empty:
                 logger.warning("Timeout waiting for signal from queue. No signals received.")
                 print("Timeout waiting for signal from queue. No signals received.")
@@ -467,6 +462,7 @@ class OrderManager:
     def wait_for_market_time(self):
         # print("Waiting")
         logging.info("Waiting for market time...")
+        print("Checking market time...")
         est = pytz.timezone('America/New_York')
         now = datetime.now(est)
         # print(f"Current time {now}")

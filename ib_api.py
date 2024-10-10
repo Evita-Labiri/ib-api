@@ -569,13 +569,13 @@ class IBApi(EClient, EWrapper):
                 logger.warning("No data to process signals.")
                 # print("No data to process signals.")
 
-            try:
-                decision_queue.get(timeout=1)
-                logger.info("Decision queue is not empty, handling decision")
-                print("Decision queue is not empty, handling decision")
-            except queue.Empty:
-                logger.warning("Decision queue is empty, no signals to process")
-                print("Decision queue is empty, no signals to process")
+            # try:
+            #     # decision_queue.get(timeout=1)
+            #     logger.info("Decision queue is not empty, handling decision")
+            #     print("Decision queue is not empty, handling decision")
+            # except queue.Empty:
+            #     logger.warning("Decision queue is empty, no signals to process")
+            #     print("Decision queue is empty, no signals to process")
 
     def close_connection(self):
         logger.info("Closing connection to IB API")
