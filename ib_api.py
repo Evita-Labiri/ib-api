@@ -577,6 +577,7 @@ class IBApi(EClient, EWrapper):
             #     logger.warning("Decision queue is empty, no signals to process")
             #     print("Decision queue is empty, no signals to process")
 
+
     def close_connection(self):
         logger.info("Closing connection to IB API")
         self.disconnect() #Closes conn with IB API

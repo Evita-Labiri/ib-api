@@ -318,6 +318,20 @@ class DataProcessor:
             # print(f"Invalid interval '{user_input}', using no interval.")
             return None
 
+    # @staticmethod
+    # def resample_data(df, interval):
+    #     resampled_df = df.resample(interval).agg({
+    #         'Open': 'first',
+    #         'High': 'max',
+    #         'Low': 'min',
+    #         'Close': 'last',
+    #         'Volume': 'sum',
+    #         'Ticker': 'first'
+    #     }).dropna().reset_index()
+    #
+    #     logger.info("Resampling Complete")
+    #     return resampled_df
+
     @staticmethod
     def resample_data(df, interval):
         resampled_df = df.resample(interval).agg({
@@ -327,7 +341,7 @@ class DataProcessor:
             'Close': 'last',
             'Volume': 'sum',
             'Ticker': 'first'
-        }).dropna().reset_index()
+        }).fillna(method='bfill').reset_index()
 
         logger.info("Resampling Complete")
         return resampled_df
