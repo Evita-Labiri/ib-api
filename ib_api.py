@@ -265,7 +265,7 @@ class IBApi(EClient, EWrapper):
         # print(f"Tick Price for reqId {reqId}: {price}")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
         # print(f'Tick Price. Ticker Id: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
-        logger.info(f'Tick Price. reqId: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
+        # logger.info(f'Tick Price. reqId: {reqId}, tickType: {tickType}, Price: {price}, Timestamp: {timestamp}')
 
         if tickType == 4:  # Last
             with self.lock:
@@ -322,7 +322,7 @@ class IBApi(EClient, EWrapper):
         # print(f"Tick Size for reqId {reqId}: {size}")
         timestamp = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S')
         # print(f'Tick Size. Ticker Id: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
-        logger.info(f'Tick Size. reqId: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
+        # logger.info(f'Tick Size. reqId: {reqId}, tickType: {tickType}, Size: {size}, Timestamp: {timestamp}')
 
         contract_info = self.reqId_info.get(reqId)
         if contract_info:

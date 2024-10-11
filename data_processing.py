@@ -3,7 +3,11 @@ import queue
 import threading
 import zipfile
 from datetime import datetime, timedelta
+
+import openpyxl
 import pandas as pd
+from openpyxl.utils.dataframe import dataframe_to_rows
+
 from order_manager import OrderManager
 import logging
 
@@ -27,7 +31,7 @@ class DataProcessor:
         self.data_in_short_position = False
         self.place_orders_outside_rth = False
         self.order_manager = OrderManager()
-        self.lock = threading.Lock()
+        self.excel_lock = threading.Lock()
 
     # def process_queue_data(self):
     #     while not self.data_ready_queue.empty():
@@ -330,7 +334,7 @@ class DataProcessor:
 
     def update_plot(self, contract, days=7,  interval_entry=None, interval_exit=None):
         real_time_data = self.process_queue_data()
-        logger.debug(f"Real-time Data List: {self.real_time_data}")
+        # logger.debug(f"Real-time Data List: {self.real_time_data}")
         # print("Real-time Data List:")
         # print(self.real_time_data)
 
@@ -339,9 +343,9 @@ class DataProcessor:
 
         df_minute = self.fetch_data_from_db('minute_data', start_date, end_date, ticker=contract.symbol)
         df_minute.set_index('Date', inplace=True)
-
-        logger.info("Minute data from DB:")
-        logger.info(df_minute.tail())
+        #
+        # logger.info("Minute data from DB:")
+        # logger.info(df_minute.tail())
 
         print("Minute data from DB:")
         print(df_minute.tail())
@@ -354,8 +358,8 @@ class DataProcessor:
                                     columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker'])
         real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
 
-        logger.debug(f"Real-time DataFrame for {ticker}:")
-        logger.debug(real_time_df)
+        # logger.debug(f"Real-time DataFrame for {ticker}:")
+        # logger.debug(real_time_df)
 
         # print("Real time df: ")
         # print(real_time_df)
@@ -455,8 +459,8 @@ class DataProcessor:
             print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
             print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
 
-            # self.export_to_excel({f'{contract.symbol}_entry': df_entry}, filename=f"signals_{interval_entry}.xlsx")
-            # self.export_to_excel({f'{contract.symbol}_exit': df_exit}, filename=f"signals_{interval_exit}.xlsx")
+            self.export_to_excel({f'{contract.symbol}_entry': df_entry}, filename=f"signals_{interval_entry}.xlsx")
+            self.export_to_excel({f'{contract.symbol}_exit': df_exit}, filename=f"signals_{interval_exit}.xlsx")
 
             return df_entry, df_exit
 
@@ -472,23 +476,70 @@ class DataProcessor:
     #     #     df['Date'] = df['Date'].dt.tz_localize(None)
     #     df.to_excel(filename, index=False)
 
+    # def export_to_excel(self, dict_of_dfs, filename="output.xlsx"):
+    #     temp_data = {}
+    #     for ticker, df in dict_of_dfs.items():
+    #         if 'Date' in df.columns:
+    #             df['Date'] = df['Date'].dt.tz_localize(None)
+    #         temp_data[ticker] = df
+    #     try:
+    #         if os.path.exists(filename):
+    #             os.remove(filename)
+    #
+    #         with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+    #             for ticker, df in temp_data.items():
+    #                 df.to_excel(writer, sheet_name=ticker, index=False)
+    #
+    #         logger.info(f"Data exported successfully to {filename}")
+    #     except Exception as e:
+    #         logger.error(f"Error writing to Excel: {str(e)}")
+
+    import os
+    import openpyxl
+    from openpyxl.utils.dataframe import dataframe_to_rows
+
+    import os
+    import openpyxl
+    from openpyxl.utils.dataframe import dataframe_to_rows
+
     def export_to_excel(self, dict_of_dfs, filename="output.xlsx"):
-        temp_data = {}
-        for ticker, df in dict_of_dfs.items():
-            if 'Date' in df.columns:
-                df['Date'] = df['Date'].dt.tz_localize(None)
-            temp_data[ticker] = df
         try:
+            # Log για να δούμε αν ο φάκελος είναι προσβάσιμος και αν το αρχείο υπάρχει
+            logger.info(f"Trying to export to {filename}. File exists: {os.path.exists(filename)}")
+
             if os.path.exists(filename):
-                os.remove(filename)
+                workbook = openpyxl.load_workbook(filename)
+            else:
+                workbook = openpyxl.Workbook()
+                workbook.remove(workbook.active)  # Αφαιρεί το default φύλλο που δημιουργείται
 
-            with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
-                for ticker, df in temp_data.items():
-                    df.to_excel(writer, sheet_name=ticker, index=False)
+            for ticker, df in dict_of_dfs.items():
+                # Διαγράφουμε το φύλλο αν υπάρχει ήδη με το ίδιο όνομα
+                if ticker in workbook.sheetnames:
+                    logger.info(f"Deleting existing sheet for {ticker}")
+                    del workbook[ticker]
 
+                worksheet = workbook.create_sheet(title=ticker)
+
+                # Προσθέτουμε τα δεδομένα από το DataFrame στο φύλλο εργασίας
+                for row in dataframe_to_rows(df, index=False, header=True):
+                    worksheet.append(row)
+
+                # Προσαρμογή των στηλών για να ταιριάζουν τα δεδομένα
+                for column_cells in worksheet.columns:
+                    length = max(len(str(cell.value)) for cell in column_cells)
+                    worksheet.column_dimensions[column_cells[0].column_letter].width = length
+
+            # Αποθηκεύουμε το αρχείο
+            workbook.save(filename)
             logger.info(f"Data exported successfully to {filename}")
+
         except Exception as e:
             logger.error(f"Error writing to Excel: {str(e)}")
+
+
+
+
 
 
 

@@ -461,7 +461,7 @@ class OrderManager:
 
     def wait_for_market_time(self):
         # print("Waiting")
-        logging.info("Waiting for market time...")
+        logging.info("Checking for market time...")
         print("Checking market time...")
         est = pytz.timezone('America/New_York')
         now = datetime.now(est)
