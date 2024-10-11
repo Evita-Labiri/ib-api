@@ -419,6 +419,7 @@ class DataProcessor:
 
             # print("Df_entry indicators")
             df_entry = self.calculate_indicators(df_entry)
+            logger.info("Entry Indicators")
             logger.info("\n" + df_entry.tail(20).to_string())
             # print(df_entry.tail())
 
@@ -433,6 +434,7 @@ class DataProcessor:
 
             # print("Df_exit indicators")
             df_exit = self.calculate_indicators(df_exit)
+            logger.info("Exit Indicators")
             logger.info("\n" + df_exit.tail(20).to_string())
             # print("Df_exit signals")
 
