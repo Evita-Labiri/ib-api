@@ -2,7 +2,8 @@ import os
 import queue
 import threading
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+from time import sleep
 
 import openpyxl
 import pandas as pd
@@ -31,46 +32,14 @@ class DataProcessor:
         self.data_in_short_position = False
         self.place_orders_outside_rth = False
         self.order_manager = OrderManager()
-        self.excel_lock = threading.Lock()
-
-    # def process_queue_data(self):
-    #     while not self.data_ready_queue.empty():
-    #         data = self.data_ready_queue.get()
-    #
-    #         logger.info(f"Data fetched from queue: {data}")
-    #         print(f"Data fetched from queue: {data}")
-    #
-    #         if isinstance(data, pd.Series):
-    #             data = data.to_dict()
-    #
-    #         if isinstance(data, dict):
-    #             ticker = data.get('Ticker')
-    #             if not ticker:
-    #                 logger.warning("Ticker missing in data, skipping...")
-    #                 # print("Ticker missing in data, skipping...")
-    #                 continue
-    #
-    #             required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker']
-    #             missing_columns = [col for col in required_columns if col not in data]
-    #             if missing_columns:
-    #                 logger.warning(f"Missing columns in data for {ticker}: {missing_columns}")
-    #                 # print(f"Missing columns in data for {ticker}: {missing_columns}")
-    #                 continue
-    #
-    #             new_row = pd.DataFrame([data], columns=required_columns)
-    #
-    #             self.real_time_data = pd.concat([self.real_time_data, new_row], ignore_index=True)
-    #
-    #             logger.debug(f"Updated DataFrame with new data: {self.real_time_data.tail()}")
-    #             # print(f"Updated DataFrame with new data:")
-    #             # print(self.real_time_data.tail())
-    #         return self.real_time_data
+        self.export_buffer = {}
+        # self.excel_lock = threading.Lock()
 
     def process_queue_data(self):
         while not self.data_ready_queue.empty():
             data = self.data_ready_queue.get()
-            logger.info(f"Data fetched from queue: {data}")
-            print(f"Data fetched from queue: {data}")
+            # logger.info(f"Data fetched from queue: {data}")
+            # print(f"Data fetched from queue: {data}")
 
             if isinstance(data, pd.Series):
                 data = data.to_dict()
@@ -88,7 +57,7 @@ class DataProcessor:
 
                 new_row = pd.DataFrame([data], columns=required_columns)
                 self.real_time_data = pd.concat([self.real_time_data, new_row], ignore_index=True)
-                logger.debug(f"Updated DataFrame with new data: {self.real_time_data.tail()}")
+                # logger.debug(f"Updated DataFrame with new data: {self.real_time_data.tail()}")
         return self.real_time_data
 
     def fetch_data_from_db(self, table_name, start_date=None, end_date=None, ticker=None):
@@ -110,6 +79,7 @@ class DataProcessor:
         df['Cumulative_Typical_Price_Volume'] = (df['Typical_Price'] * df['Volume']).groupby(df['Session']).cumsum()
         df['Cumulative_Volume'] = df['Volume'].groupby(df['Session']).cumsum()
         df['VWAP'] = df['Cumulative_Typical_Price_Volume'] / df['Cumulative_Volume']
+        df['VWAP'] = df['VWAP'].fillna(0)
 
         df['SMA20'] = df['Close'].rolling(window=20).mean()
         df['BB_Middle'] = df['SMA20']
@@ -341,7 +311,7 @@ class DataProcessor:
             'Close': 'last',
             'Volume': 'sum',
             'Ticker': 'first'
-        }).fillna(method='bfill').reset_index()
+        }).ffill().reset_index()
 
         logger.info("Resampling Complete")
         return resampled_df
@@ -427,9 +397,9 @@ class DataProcessor:
                 # print(combined_data.tail())
 
             # Resample and process for entry signals
-            # print("Df_entry resampling")
+            print("Df_entry resampling")
             df_entry = self.resample_data(combined_data, interval_entry)
-            # print(df_entry.tail())
+            print(df_entry.tail())
 
             # print("Df_entry indicators")
             df_entry = self.calculate_indicators(df_entry)
@@ -442,9 +412,9 @@ class DataProcessor:
             # print(df_entry.tail())
 
             # Resample and process for exit signals
-            #print("Df_exit resampling")
+            print("Df_exit resampling")
             df_exit = self.resample_data(combined_data, interval_exit)
-            # print(df_exit.tail())
+            print(df_exit.tail())
 
             # print("Df_exit indicators")
             df_exit = self.calculate_indicators(df_exit)
@@ -475,8 +445,8 @@ class DataProcessor:
             print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
             print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
 
-            self.export_to_excel({f'{contract.symbol}_entry': df_entry}, filename=f"signals_{interval_entry}.xlsx")
-            self.export_to_excel({f'{contract.symbol}_exit': df_exit}, filename=f"signals_{interval_exit}.xlsx")
+            self.export_buffer[f"{contract.symbol}_entry"] = df_entry
+            self.export_buffer[f"{contract.symbol}_exit"] = df_exit
 
             return df_entry, df_exit
 
@@ -484,75 +454,77 @@ class DataProcessor:
             logger.warning(f"No data to process for {ticker}.")
             print("No data to process.")
             return None
-
-    # @staticmethod
-    # def export_to_excel(df, filename="output.xlsx"):
-    #     # print(f"Exporting to Excel. Data:\n{df.tail()}")
-    #     # if 'Date' in df.columns:
-    #     #     df['Date'] = df['Date'].dt.tz_localize(None)
-    #     df.to_excel(filename, index=False)
-
+    #
     # def export_to_excel(self, dict_of_dfs, filename="output.xlsx"):
-    #     temp_data = {}
-    #     for ticker, df in dict_of_dfs.items():
-    #         if 'Date' in df.columns:
-    #             df['Date'] = df['Date'].dt.tz_localize(None)
-    #         temp_data[ticker] = df
     #     try:
+    #         logger.info(f"Trying to export to {filename}. File exists: {os.path.exists(filename)}")
     #         if os.path.exists(filename):
-    #             os.remove(filename)
+    #             workbook = openpyxl.load_workbook(filename)
+    #         else:
+    #             workbook = openpyxl.Workbook()
+    #             workbook.remove(workbook.active)
+    #         for ticker, df in dict_of_dfs.items():
+    #             if ticker in workbook.sheetnames:
+    #                 logger.info(f"Deleting existing sheet for {ticker}")
+    #                 del workbook[ticker]
+    #             worksheet = workbook.create_sheet(title=ticker)
+    #             for row in dataframe_to_rows(df, index=False, header=True):
+    #                 worksheet.append(row)
+    #             for column_cells in worksheet.columns:
+    #                 length = max(len(str(cell.value)) for cell in column_cells)
+    #                 worksheet.column_dimensions[column_cells[0].column_letter].width = length
     #
-    #         with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
-    #             for ticker, df in temp_data.items():
-    #                 df.to_excel(writer, sheet_name=ticker, index=False)
-    #
+    #         workbook.save(filename)
     #         logger.info(f"Data exported successfully to {filename}")
     #     except Exception as e:
     #         logger.error(f"Error writing to Excel: {str(e)}")
 
-    import os
-    import openpyxl
-    from openpyxl.utils.dataframe import dataframe_to_rows
-
-    import os
-    import openpyxl
-    from openpyxl.utils.dataframe import dataframe_to_rows
-
-    def export_to_excel(self, dict_of_dfs, filename="output.xlsx"):
+    def export_to_excel(self, dict_of_dfs, filename="final_output.xlsx"):
         try:
-            # Log για να δούμε αν ο φάκελος είναι προσβάσιμος και αν το αρχείο υπάρχει
-            logger.info(f"Trying to export to {filename}. File exists: {os.path.exists(filename)}")
-
             if os.path.exists(filename):
                 workbook = openpyxl.load_workbook(filename)
             else:
                 workbook = openpyxl.Workbook()
-                workbook.remove(workbook.active)  # Αφαιρεί το default φύλλο που δημιουργείται
+                workbook.remove(workbook.active)
 
             for ticker, df in dict_of_dfs.items():
-                # Διαγράφουμε το φύλλο αν υπάρχει ήδη με το ίδιο όνομα
-                if ticker in workbook.sheetnames:
-                    logger.info(f"Deleting existing sheet for {ticker}")
-                    del workbook[ticker]
+                sheet_name = ticker[:31] if len(ticker) > 31 else ticker
 
-                worksheet = workbook.create_sheet(title=ticker)
+                if sheet_name in workbook.sheetnames:
+                    worksheet = workbook[sheet_name]
+                    # starting_row = worksheet.max_row + 1
+                    for row in dataframe_to_rows(df, index=False,
+                                                 header=False):
+                        worksheet.append(row)
+                else:
+                    worksheet = workbook.create_sheet(title=sheet_name)
+                    for row in dataframe_to_rows(df, index=False, header=True):
+                        worksheet.append(row)
 
-                # Προσθέτουμε τα δεδομένα από το DataFrame στο φύλλο εργασίας
-                for row in dataframe_to_rows(df, index=False, header=True):
-                    worksheet.append(row)
-
-                # Προσαρμογή των στηλών για να ταιριάζουν τα δεδομένα
                 for column_cells in worksheet.columns:
                     length = max(len(str(cell.value)) for cell in column_cells)
                     worksheet.column_dimensions[column_cells[0].column_letter].width = length
 
-            # Αποθηκεύουμε το αρχείο
             workbook.save(filename)
-            logger.info(f"Data exported successfully to {filename}")
+            print(f"Data successfully exported to {filename}")
 
         except Exception as e:
-            logger.error(f"Error writing to Excel: {str(e)}")
+            print(f"Error writing to Excel: {str(e)}")
 
+    def export_to_excel_thread(self):
+        while True:
+            if self.export_buffer:
+                logger.info("Starting export to Excel")
+                for symbol_key in self.export_buffer:
+                    if "entry" in symbol_key:
+                        self.export_to_excel({symbol_key: self.export_buffer[symbol_key]}, filename="5min_data.xlsx")
+                        logger.info(f"{symbol_key} - 5-minute data export completed")
+                for symbol_key in self.export_buffer:
+                    if "exit" in symbol_key:
+                        self.export_to_excel({symbol_key: self.export_buffer[symbol_key]}, filename="1min_data.xlsx")
+                        logger.info(f"{symbol_key} - 1-minute data export completed")
+
+            sleep(300)
 
 
 

@@ -533,7 +533,6 @@ class OrderManager:
 
     def handle_order_execution(self, orderId, status):
         # with self.lock:
-            # Ελέγχουμε αν το order συνδέεται με κάποιο position
         for contract_symbol, position in self.positions.items():
             if position['order_id'] == orderId:
                 logger.info(f"Processing order {orderId} for {contract_symbol} with status: {status}")

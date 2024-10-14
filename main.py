@@ -1,3 +1,5 @@
+import signal
+import sys
 import threading
 import time
 # from datetime import datetime,  time as dt_time
@@ -136,8 +138,8 @@ def run_order_script():
     order_manager = OrderManager()
     data_processor.order_manager = order_manager
     logger.info("Connecting to TWS API...")
-    app.connect("100.64.0.21", 7497, 1)
-    # app.connect("100.64.0.69", 7497, 1)
+    # app.connect("100.64.0.21", 7497, 1)
+    app.connect("100.64.0.69", 7497, 1)
 
     t1 = threading.Thread(target=app.run)
     t1.start()
@@ -313,6 +315,10 @@ def run_order_script():
                                        args=(app, decision_queue, decision_flag))
     decision_thread.start()
 
+    logger.info("All tickers processed, starting export to Excel.")
+    export_thread = threading.Thread(target= data_processor.export_to_excel_thread)
+    export_thread.start()
+
     try:
         while not stop_flag.is_set():
             logger.debug(f"Running order management... (stop_flag: {stop_flag.is_set()})")
@@ -332,6 +338,8 @@ def run_order_script():
     finally:
         logger.info("Finally clause activated. Closing connections and joining threads.")
         # print("Finally clause activated")
+        if data_processor.export_buffer:
+            data_processor.export_to_excel(data_processor.export_buffer, filename="final_output.xlsx")
         app.close_connection()
         stop_flag.set()
         decision_flag.set()
@@ -339,7 +347,7 @@ def run_order_script():
         esc_listener_thread.join()
         main_thread.join()
         logger.info("All threads have been terminated.")
-        # print("All threads have been terminated.")
+        print("All threads have been terminated.")
 
 # def main():
 #     while True:

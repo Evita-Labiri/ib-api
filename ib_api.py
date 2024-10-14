@@ -22,6 +22,20 @@ logging.basicConfig(
 )
 logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
 
+ib_api_logger = logging.getLogger('ib_api_logger')
+ib_api_logger.setLevel(logging.INFO)
+
+# Create a file handler for IB API logs
+ib_api_file_handler = logging.FileHandler("ib_api_specific.log")
+ib_api_file_handler.setLevel(logging.INFO)
+
+# Create a log format and add it to the file handler
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+ib_api_file_handler.setFormatter(formatter)
+
+# Add the handler to the IB API logger
+ib_api_logger.addHandler(ib_api_file_handler)
+
 
 class IBApi(EClient, EWrapper):
     def __init__(self, data_processor, db):
@@ -50,30 +64,30 @@ class IBApi(EClient, EWrapper):
         self.ticker = ticker
 
     def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
-        logger.error(f"Error: {reqId} {errorCode} {errorString} {advancedOrderRejectJson}")
+        ib_api_logger.error(f"Error: {reqId} {errorCode} {errorString} {advancedOrderRejectJson}")
         # print("Error: {} {} {} {}".format(reqId, errorCode, errorString, advancedOrderRejectJson))
 
     def nextValidId(self, orderId):
         super().nextValidId(orderId)
         self.nextValidOrderId = orderId
-        logger.info(f"Next Valid Order ID: {orderId}")
+        ib_api_logger.info(f"Next Valid Order ID: {orderId}")
         # print(f"Next Valid Order ID: {orderId}")
 
     def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId,
                     whyHeld, mktCapPrice):
-        logger.info(f"Order Status: {orderId}, Status: {status}")
+        ib_api_logger.info(f"Order Status: {orderId}, Status: {status}")
         print(f"Order Status: {orderId}, Status: {status}")
         if status in ['PreSubmitted', 'Submitted']:
-            logger.info(f"Order {orderId} has been successfully placed with status: {status}")
+            ib_api_logger.info(f"Order {orderId} has been successfully placed with status: {status}")
             print(f"Order {orderId} has been successfully placed with status: {status}")
         elif status == 'Filled':
-            logger.info(f"Order {orderId} has been filled.")
+            ib_api_logger.info(f"Order {orderId} has been filled.")
             print(f"Order {orderId} has been filled.")
         elif status in ['Cancelled', 'Inactive']:
-            logger.error(f"Order {orderId} failed with status: {status}")
+            ib_api_logger.error(f"Order {orderId} failed with status: {status}")
             print(f"Order {orderId} failed with status: {status}")
         else:
-            logger.warning(f"Order {orderId} is in an unknown state: {status}")
+            ib_api_logger.warning(f"Order {orderId} is in an unknown state: {status}")
             print(f"Order {orderId} is in an unknown state: {status}")
 
         self.order_manager.handle_order_execution(orderId, status)
@@ -87,8 +101,8 @@ class IBApi(EClient, EWrapper):
             f"Exec Details - reqId: {reqId}, symbol: {contract.symbol}, execId: {execution.execId}, orderId: {execution.orderId}, shares: {execution.shares}, lastLiquidity: {execution.lastLiquidity}")
 
     def historicalData(self, reqId, bar):
-        logger.debug("Requesting data...")
-        logger.debug(
+        ib_api_logger.debug("Requesting data...")
+        ib_api_logger.debug(
             f'Time: {bar.date}, Open: {bar.open}, High: {bar.high}, Low: {bar.low}, Close: {bar.close}, Volume: {bar.volume}')
         print("Requesting data...")
         print(
@@ -146,7 +160,7 @@ class IBApi(EClient, EWrapper):
         )
 
     def historicalDataEnd(self, reqId, start, end):
-        logger.info("Historical data download complete")
+        # ib_api_logger.info("Historical data download complete")
         print("Historical data download complete")
         self.data_download_complete = True
         self.data_processor.data_ready_queue.put(self.data)
@@ -227,25 +241,23 @@ class IBApi(EClient, EWrapper):
         #     print("No new data to update.")
 
         # self.data_processor.update_plot(contract=contract, interval=self.data_processor.interval)
-
-    def calculate_duration(self, start_date, end_date):
-        # Αφαιρούμε τη ζώνη ώρας από το start_date και το end_date για να ταιριάζουν με τη μορφή
-        start_date = start_date.split(' ')[0] + ' ' + start_date.split(' ')[1]  # Αφαιρεί τη ζώνη ώρας
-        end_date = end_date.split(' ')[0] + ' ' + end_date.split(' ')[1]  # Αφαιρεί τη ζώνη ώρας
-
-        # Προσαρμόστε τη μορφή για να ταιριάζει με την ημερομηνία που έρχεται από τη βάση
-        start = datetime.strptime(start_date, '%Y%m%d %H:%M:%S')
-        end = datetime.strptime(end_date, '%Y%m%d %H:%M:%S')
-        duration = end - start
-
-        if duration.days > 0:
-            return f"{duration.days} D"
-        elif duration.seconds > 3600:
-            hours = duration.seconds // 3600
-            return f"{hours} H"
-        else:
-            minutes = duration.seconds // 60
-            return f"{minutes} M"
+    #
+    # def calculate_duration(self, start_date, end_date):
+    #     start_date = start_date.split(' ')[0] + ' ' + start_date.split(' ')[1]
+    #     end_date = end_date.split(' ')[0] + ' ' + end_date.split(' ')[1]
+    #
+    #     start = datetime.strptime(start_date, '%Y%m%d %H:%M:%S')
+    #     end = datetime.strptime(end_date, '%Y%m%d %H:%M:%S')
+    #     duration = end - start
+    #
+    #     if duration.days > 0:
+    #         return f"{duration.days} D"
+    #     elif duration.seconds > 3600:
+    #         hours = duration.seconds // 3600
+    #         return f"{hours} H"
+    #     else:
+    #         minutes = duration.seconds // 60
+    #         return f"{minutes} M"
 
     def check_connection(self):
         if not self.isConnected():
@@ -257,7 +269,8 @@ class IBApi(EClient, EWrapper):
                 # print("Reconnected to API.")
                 sleep(2)
             else:
-                logger.error("Failed to reconnect, setting stop_flag.")
+                # logger.error("Failed to reconnect, setting stop_flag.")
+                logger.error("Failed to reconnect.")
                 # print("Failed to reconnect, setting stop_flag.")
     #             stop_flag.set()
 
@@ -565,7 +578,7 @@ class IBApi(EClient, EWrapper):
                     else:
                         logger.error(f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")
                         # print(
-                        #     f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")                else:
+                        #     f"Error: Invalid data type for {symbol}. Entry: {type(data['entry'])}, Exit: {type(data['exit'])}")
                 logger.warning("No data to process signals.")
                 # print("No data to process signals.")
 
