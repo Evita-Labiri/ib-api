@@ -167,19 +167,19 @@ class OrderManager:
         # print(f"Running process signals for {contract_symbol}")
         # with self.lock:
         signals = []
-
-        if not isinstance(df_entry, pd.DataFrame):
-            logger.error(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
-            # print(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
-            return
-        if not isinstance(df_exit, pd.DataFrame):
-            logger.error(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
-            # print(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
-            return
+        #
+        # if not isinstance(df_entry, pd.DataFrame):
+        #     logger.info(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
+        #     print(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
+        #     return
+        # if not isinstance(df_exit, pd.DataFrame):
+        #     logger.info(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
+        #     print(f"Error: df_exit is not a DataFrame but a {type(df_exit)}")
+        #     return
 
         if self.alert_active.get(contract_symbol, False):
             logger.info(f"Alert already active for {contract_symbol}, skipping.")
-            # print(f"Alert already active for {contract_symbol}, skipping.")
+            print(f"Alert already active for {contract_symbol}, skipping.")
             return
 
         try:
@@ -192,11 +192,9 @@ class OrderManager:
             if pd.api.types.is_datetime64_any_dtype(timestamp):
                 timestamp = timestamp.tz_localize(None)
 
-            # Παίρνουμε τα δεδομένα απευθείας από το DataFrame αντί για Series
             # long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
             # short_entry = df_entry.at[i, 'Short_Entry'] if 'Short_Entry' in df_entry.columns else False
             #
-            # # Παίρνουμε τα δεδομένα από το df_exit για την ίδια χρονική στιγμή
             # if i < len(df_exit):
             #     long_exit = df_exit.at[i, 'Long_Exit'] if 'Long_Exit' in df_exit.columns else False
             #     short_exit = df_exit.at[i, 'Short_Exit'] if 'Short_Exit' in df_exit.columns else False
@@ -211,7 +209,6 @@ class OrderManager:
 
             previous_close = df_entry.at[i - 1, 'Close'] if i > 0 else None
 
-            # Έλεγχος για αντικρουόμενα σήματα entry και exit
             if (long_entry and long_exit) or (short_entry and short_exit):
                 logger.warning(f"Conflicting signals for {contract_symbol}. No action taken.")
                 print(f"Conflicting signals for {contract_symbol}. No action taken.")
@@ -219,7 +216,6 @@ class OrderManager:
                 self.alert_active[contract_symbol] = False
                 return
 
-            # Έλεγχος για ταυτόχρονα Long και Short Entry
             if long_entry and short_entry:
                 logger.warning(f"Both Long Entry and Short Entry signals present for {contract_symbol}. No action taken.")
                 print(
@@ -228,7 +224,6 @@ class OrderManager:
                 self.alert_active[contract_symbol] = False
                 return
 
-            # Διαχείριση long entry signals
             if long_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
                 signals.append((contract_symbol, 'long', i, previous_close, timestamp))
                 logger.info(f"Long entry signal detected: {signals[-1]}")
@@ -236,7 +231,6 @@ class OrderManager:
                 self.alert_active[contract_symbol] = True
                 # break
 
-            # Διαχείριση short entry signals
             if short_entry and not self.positions[contract_symbol]['in_long_position'] and not self.positions[contract_symbol]['in_short_position']:
                 signals.append((contract_symbol, 'short', i, previous_close, timestamp))
                 logger.info(f"Short entry signal detected: {signals[-1]}")
@@ -244,7 +238,6 @@ class OrderManager:
                 self.alert_active[contract_symbol] = True
                 # break
 
-            # Διαχείριση long exit signals
             if long_exit and self.positions[contract_symbol]['in_long_position']:
                 signals.append((contract_symbol, 'exit_long', i, previous_close, timestamp))
                 logger.info(f"Long exit signal detected: {signals[-1]}")
@@ -252,24 +245,21 @@ class OrderManager:
                 self.alert_active[contract_symbol] = True
                 # break
 
-            # Διαχείριση short exit signals
             if short_exit and self.positions[contract_symbol]['in_short_position']:
                 signals.append((contract_symbol, 'exit_short', i, previous_close, timestamp))
                 logger.info(f"Short exit signal detected: {signals[-1]}")
                 print(f"Short exit signal detected: {signals[-1]}")
                 self.alert_active[contract_symbol] = True
                 # break
-
         except KeyError as e:
-            logger.error(f"KeyError at index {i}: {e}, skipping this index.")
-            # print(f"KeyError at index {i}: {e}, skipping this index.")
+            logger.info(f"KeyError at index {i}: {e}, skipping this index.")
+            print(f"KeyError at index {i}: {e}, skipping this index.")
             # continue
         except Exception as e:
-            logger.error(f"Unexpected error at index {i}: {e}, skipping this index.")
-            # print(f"Unexpected error at index {i}: {e}, skipping this index.")
+            logger.info(f"Unexpected error at index {i}: {e}, skipping this index.")
+            print(f"Unexpected error at index {i}: {e}, skipping this index.")
             # continue
 
-        # Αν υπάρχουν signals, τα στέλνουμε στην ουρά
         if signals:
             logger.info(f"Signals to be added to queue: {signals}")
             # print(f"Signals to be added to queue: {signals}")
@@ -486,51 +476,6 @@ class OrderManager:
 
             sleep(wait_seconds)
 
-    # def handle_order_execution(self, orderId, status):
-    #     # Ελέγχουμε αν το order είναι συνδεδεμένο με κάποιο position
-    #     for contract_symbol, position in self.positions.items():
-    #         if position['order_id'] == orderId:
-    #             if status in ['Filled', 'Cancelled']:
-    #                 print(f"Order {orderId} for {contract_symbol} is {status}. Closing position.")
-    #                 self.positions[contract_symbol]['status'] = 'Closed'
-    #                 self.positions[contract_symbol]['in_long_position'] = False
-    #                 self.positions[contract_symbol]['in_short_position'] = False
-    #                 self.positions[contract_symbol]['order_id'] = None
-    #                 print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
-    #                 self.alert_active[contract_symbol] = False  # Reset alert flag for new signals
-    #             break
-
-    # def handle_order_execution(self, orderId, status):
-    #     """
-    #     Αυτή η συνάρτηση διαχειρίζεται την ενημέρωση των θέσεων για κάθε μετοχή όταν αλλάζει το status των εντολών.
-    #     """
-    #     print(f"Processing order {orderId} with status: {status}")
-    #
-    #     # Ελέγχουμε αν το order είναι συνδεδεμένο με κάποιο position για συγκεκριμένο symbol
-    #     for contract_symbol, position in self.positions.items():
-    #         if position['order_id'] == orderId:
-    #             print(f"Found order {orderId} for contract {contract_symbol} with status: {status}")
-    #
-    #             if status in ['Pre-Submitted', 'Submitted']:
-    #                 # Αν η εντολή είναι Pre-Submitted ή Submitted, ενημερώνουμε ότι το position είναι ακόμα ανοιχτό
-    #                 print(f"Order {orderId} for {contract_symbol} is {status}. Keeping position open.")
-    #                 self.positions[contract_symbol]['status'] = 'Open'
-    #                 # Δεν χρειάζεται να κλείσουμε τίποτα ακόμα
-    #
-    #             elif status in ['Filled', 'Cancelled']:
-    #                 # Αν το status είναι Filled ή Cancelled, κλείνουμε το position
-    #                 print(f"Order {orderId} for {contract_symbol} is {status}. Closing position.")
-    #                 self.positions[contract_symbol]['status'] = 'Closed'
-    #                 self.positions[contract_symbol]['in_long_position'] = False
-    #                 self.positions[contract_symbol]['in_short_position'] = False
-    #                 self.positions[contract_symbol]['order_id'] = None
-    #                 print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
-    #
-    #             else:
-    #                 print(f"Order {orderId} for {contract_symbol} has status {status}. No action taken.")
-    #
-    #             break
-
     def handle_order_execution(self, orderId, status):
         # with self.lock:
         for contract_symbol, position in self.positions.items():
@@ -580,12 +525,6 @@ class OrderManager:
                   f"Order ID: {pos['order_id']}, Status: {pos['status']}")
         logger.info("----------------------")
         print("----------------------")
-
-    # def display_orders(self):
-    #     orders = list(self.order_queue.queue)
-    #     for order in orders:
-    #         print(f"Order ID: {order.orderId}, Action: {order.action}, Quantity: {order.totalQuantity}")
-    # ena antistoixo pou tha vlepw mono ta positions
 
     # def stop_program_after_duration(duration, decision_flag):
     #     #     sleep(duration)

@@ -214,50 +214,51 @@ class Database:
             print(f"Error fetching columns from table {table_name}: {e}")
             return []
 
-    def clear_data_from_table(self, table_name):
-        try:
-            self.ensure_connection()
-            query = text(f"TRUNCATE TABLE {table_name}")
-            self.session.execute(query)
-            self.session.commit()
-            logger.info(f"All data from {table_name} has been deleted.")
-            print(f"All data from {table_name} has been deleted.")
-        except SQLAlchemyError as e:
-            logger.error(f"Error deleting data from {table_name}: {e}")
-            print(f"Error deleting data from {table_name}: {e}")
-            self.session.rollback()
+    #TO-DO: Update db from the date of the last addition for each ticker (not by traversing all data to skip duplicates and add the new data)
+    # def clear_data_from_table(self, table_name):
+    #     try:
+    #         self.ensure_connection()
+    #         query = text(f"TRUNCATE TABLE {table_name}")
+    #         self.session.execute(query)
+    #         self.session.commit()
+    #         logger.info(f"All data from {table_name} has been deleted.")
+    #         print(f"All data from {table_name} has been deleted.")
+    #     except SQLAlchemyError as e:
+    #         logger.error(f"Error deleting data from {table_name}: {e}")
+    #         print(f"Error deleting data from {table_name}: {e}")
+    #         self.session.rollback()
 
-    def update_data_in_db(self, df, table_name, temp_table_name):
-        try:
-            df.to_sql(temp_table_name, self.engine, if_exists='replace', index=False)
-            logger.info(f"Data saved to temporary table {temp_table_name} successfully.")
-            # print("Data saved to temporary table successfully")
-
-            with self.engine.begin() as conn:
-                conn.execute(text(f"""
-                    UPDATE {table_name} t
-                    JOIN {temp_table_name} temp ON t.id = temp.id
-                    SET t.date_time = temp.date_time
-                """))
-            logger.info(f"Data updated successfully in {table_name}.")
-            print("Data updated successfully")
-        except SQLAlchemyError as e:
-            logger.error(f"Error updating data in {table_name}: {e}")
-
-    def load_data_from_db(self, table_name):
-        # print(f"Attempting to load data from table: {table_name}")
-        query = f"SELECT * FROM {table_name}"
-        # print(f"SQL Query: {query}")
-
-        try:
-            df = pd.read_sql(query, self.engine)
-            logger.info(f"Data loaded successfully from {table_name}.")
-            # print("Data loaded successfully")
-            return df
-        except Exception as e:
-            logger.error(f"Error loading data from {table_name}: {e}")
-            print(f"Error loading data: {e}")
-            return pd.DataFrame()
+    # def update_data_in_db(self, df, table_name, temp_table_name):
+    #     try:
+    #         df.to_sql(temp_table_name, self.engine, if_exists='replace', index=False)
+    #         logger.info(f"Data saved to temporary table {temp_table_name} successfully.")
+    #         # print("Data saved to temporary table successfully")
+    #
+    #         with self.engine.begin() as conn:
+    #             conn.execute(text(f"""
+    #                 UPDATE {table_name} t
+    #                 JOIN {temp_table_name} temp ON t.id = temp.id
+    #                 SET t.date_time = temp.date_time
+    #             """))
+    #         logger.info(f"Data updated successfully in {table_name}.")
+    #         print("Data updated successfully")
+    #     except SQLAlchemyError as e:
+    #         logger.error(f"Error updating data in {table_name}: {e}")
+    #
+    # def load_data_from_db(self, table_name):
+    #     # print(f"Attempting to load data from table: {table_name}")
+    #     query = f"SELECT * FROM {table_name}"
+    #     # print(f"SQL Query: {query}")
+    #
+    #     try:
+    #         df = pd.read_sql(query, self.engine)
+    #         logger.info(f"Data loaded successfully from {table_name}.")
+    #         # print("Data loaded successfully")
+    #         return df
+    #     except Exception as e:
+    #         logger.error(f"Error loading data from {table_name}: {e}")
+    #         print(f"Error loading data: {e}")
+    #         return pd.DataFrame()
 
     def get_last_date_for_symbol(self, ticker):
         try:

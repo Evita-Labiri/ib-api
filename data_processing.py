@@ -288,22 +288,10 @@ class DataProcessor:
             # print(f"Invalid interval '{user_input}', using no interval.")
             return None
 
-    # @staticmethod
-    # def resample_data(df, interval):
-    #     resampled_df = df.resample(interval).agg({
-    #         'Open': 'first',
-    #         'High': 'max',
-    #         'Low': 'min',
-    #         'Close': 'last',
-    #         'Volume': 'sum',
-    #         'Ticker': 'first'
-    #     }).dropna().reset_index()
-    #
-    #     logger.info("Resampling Complete")
-    #     return resampled_df
-
     @staticmethod
     def resample_data(df, interval):
+
+        # Αντικαθιστά τα κενά (NaN) στις στήλες με την προηγούμενη διαθέσιμη τιμή που υπάρχει πριν από το κενό.
         resampled_df = df.resample(interval).agg({
             'Open': 'first',
             'High': 'max',
@@ -454,30 +442,6 @@ class DataProcessor:
             logger.warning(f"No data to process for {ticker}.")
             print("No data to process.")
             return None
-    #
-    # def export_to_excel(self, dict_of_dfs, filename="output.xlsx"):
-    #     try:
-    #         logger.info(f"Trying to export to {filename}. File exists: {os.path.exists(filename)}")
-    #         if os.path.exists(filename):
-    #             workbook = openpyxl.load_workbook(filename)
-    #         else:
-    #             workbook = openpyxl.Workbook()
-    #             workbook.remove(workbook.active)
-    #         for ticker, df in dict_of_dfs.items():
-    #             if ticker in workbook.sheetnames:
-    #                 logger.info(f"Deleting existing sheet for {ticker}")
-    #                 del workbook[ticker]
-    #             worksheet = workbook.create_sheet(title=ticker)
-    #             for row in dataframe_to_rows(df, index=False, header=True):
-    #                 worksheet.append(row)
-    #             for column_cells in worksheet.columns:
-    #                 length = max(len(str(cell.value)) for cell in column_cells)
-    #                 worksheet.column_dimensions[column_cells[0].column_letter].width = length
-    #
-    #         workbook.save(filename)
-    #         logger.info(f"Data exported successfully to {filename}")
-    #     except Exception as e:
-    #         logger.error(f"Error writing to Excel: {str(e)}")
 
     def export_to_excel(self, dict_of_dfs, filename="final_output.xlsx"):
         try:

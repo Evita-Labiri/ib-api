@@ -374,7 +374,7 @@ class IBApi(EClient, EWrapper):
 
                     self.real_time_data[ticker] = pd.concat([self.real_time_data[ticker], new_row], ignore_index=True)
                     self.data_processor.data_ready_queue.put(self.real_time_data[ticker].iloc[-1])
-                    logger.info(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
+                    # logger.info(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
                     # print(f"Appended real-time data size for {ticker}: {self.real_time_data[ticker].iloc[-1]}")
                     # self.data_processor.update_plot(contract=contract,
                     #                                 interval_entry=self.data_processor.interval_entry,
@@ -396,6 +396,8 @@ class IBApi(EClient, EWrapper):
         if auxPrice is not None:
             order.auxPrice = auxPrice
         order.tif = "DAY"
+        order.eTradeOnly=''     #Fix for ETradeOnly
+        order.firmQuoteOnly=''
         logger.info(f"Created order: {order}")
         # print(f"Created order: {order}")
         return order
@@ -565,7 +567,7 @@ class IBApi(EClient, EWrapper):
                 # order_manager.wait_for_market_time()
                 # print(f"Combined data dictionary: {combined_data_dict}")
                 for symbol, data in combined_data_dict.items():
-                    if isinstance(data['entry'], pd.DataFrame) and isinstance(data['exit'], pd.DataFrame):
+                    if isinstance(data['entry'], pd.DataFrame) or isinstance(data['exit'], pd.DataFrame):
                         if not data['entry'].empty and not data['exit'].empty:
                             logger.info(f"Processing signals for {symbol}. Entry has {len(data['entry'])} rows and Exit has {len(data['exit'])} rows.")
                             # print(
