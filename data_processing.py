@@ -18,6 +18,25 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[logging.FileHandler("ib_api.log")]
 )
+
+logger_5min = logging.getLogger('logger_5min')
+logger_5min.setLevel(logging.INFO)
+
+file_handler_5min = logging.FileHandler('5min_data.log')
+file_handler_5min.setLevel(logging.INFO)
+formatter_5min = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler_5min.setFormatter(formatter_5min)
+logger_5min.addHandler(file_handler_5min)
+
+logger_1min = logging.getLogger('logger_1min')
+logger_1min.setLevel(logging.INFO)
+
+file_handler_1min = logging.FileHandler('1min_data.log')
+file_handler_1min.setLevel(logging.INFO)
+formatter_1min = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler_1min.setFormatter(formatter_1min)
+logger_1min.addHandler(file_handler_1min)
+
 logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
 
 
@@ -290,8 +309,6 @@ class DataProcessor:
 
     @staticmethod
     def resample_data(df, interval):
-
-        # Αντικαθιστά τα κενά (NaN) στις στήλες με την προηγούμενη διαθέσιμη τιμή που υπάρχει πριν από το κενό.
         resampled_df = df.resample(interval).agg({
             'Open': 'first',
             'High': 'max',
@@ -398,6 +415,8 @@ class DataProcessor:
             # print("Df_entry signals")
             df_entry = self.generate_signals(df_entry)
             # print(df_entry.tail())
+            logger_5min.info("5-minute Entry Signals")
+            logger_5min.info("\n" + df_entry.tail(20).to_string())
 
             # Resample and process for exit signals
             print("Df_exit resampling")
@@ -412,29 +431,31 @@ class DataProcessor:
 
             df_exit = self.generate_signals(df_exit)
             # print(df_exit.tail())
+            logger_1min.info("1-minute Exit Signals")
+            logger_1min.info("\n" + df_exit.tail(20).to_string())
 
             # print(f"Exit {interval_exit} Data with Signals:")
             # print(df_exit.tail())
             #
             # print(f"Entry {interval_entry} Data with Signals:")
             # print(df_entry.tail())
-            logger.info(f"Entry {interval_entry} Data for {contract.symbol} with Signals:")
-            logger.info("\n" + df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]).tail(10).to_string())
+            # logger.info(f"Entry {interval_entry} Data for {contract.symbol} with Signals:")
+            # logger.info("\n" + df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]).tail(10).to_string())
+            #
+            # logger.info(f"Exit {interval_exit} Data for {contract.symbol} with Signals:")
+            # logger.info("\n" + df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]).tail(10).to_string())
 
-            logger.info(f"Exit {interval_exit} Data for {contract.symbol} with Signals:")
-            logger.info("\n" + df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]).tail(10).to_string())
+            # # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
+            # print(
+            #     f"Entry {interval_entry} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
+            # print(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
+            #
+            # # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_exit
+            # print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
+            # print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
 
-            # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_entry
-            print(
-                f"Entry {interval_entry} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
-            print(df_entry.iloc[:, :2].join(df_entry.iloc[:, -4:]))
-
-            # Εκτύπωση των 2 πρώτων και των 4 τελευταίων στηλών για το df_exit
-            print(f"Exit {interval_exit} Data for {contract.symbol} with Signals (2 πρώτες στήλες και 4 τελευταίες στήλες):")
-            print(df_exit.iloc[:, :2].join(df_exit.iloc[:, -4:]))
-
-            self.export_buffer[f"{contract.symbol}_entry"] = df_entry
-            self.export_buffer[f"{contract.symbol}_exit"] = df_exit
+            # self.export_buffer[f"{contract.symbol}_entry"] = df_entry
+            # self.export_buffer[f"{contract.symbol}_exit"] = df_exit
 
             return df_entry, df_exit
 
@@ -443,52 +464,52 @@ class DataProcessor:
             print("No data to process.")
             return None
 
-    def export_to_excel(self, dict_of_dfs, filename="final_output.xlsx"):
-        try:
-            if os.path.exists(filename):
-                workbook = openpyxl.load_workbook(filename)
-            else:
-                workbook = openpyxl.Workbook()
-                workbook.remove(workbook.active)
+    # def export_to_excel(self, dict_of_dfs, filename="final_output.xlsx"):
+    #     try:
+    #         if os.path.exists(filename):
+    #             workbook = openpyxl.load_workbook(filename)
+    #         else:
+    #             workbook = openpyxl.Workbook()
+    #             workbook.remove(workbook.active)
+    #
+    #         for ticker, df in dict_of_dfs.items():
+    #             sheet_name = ticker[:31] if len(ticker) > 31 else ticker
+    #
+    #             if sheet_name in workbook.sheetnames:
+    #                 worksheet = workbook[sheet_name]
+    #                 # starting_row = worksheet.max_row + 1
+    #                 for row in dataframe_to_rows(df, index=False,
+    #                                              header=False):
+    #                     worksheet.append(row)
+    #             else:
+    #                 worksheet = workbook.create_sheet(title=sheet_name)
+    #                 for row in dataframe_to_rows(df, index=False, header=True):
+    #                     worksheet.append(row)
+    #
+    #             for column_cells in worksheet.columns:
+    #                 length = max(len(str(cell.value)) for cell in column_cells)
+    #                 worksheet.column_dimensions[column_cells[0].column_letter].width = length
+    #
+    #         workbook.save(filename)
+    #         print(f"Data successfully exported to {filename}")
+    #
+    #     except Exception as e:
+    #         print(f"Error writing to Excel: {str(e)}")
+    #
+    # def export_to_excel_thread(self):
+    #     while True:
+    #         if self.export_buffer:
+    #             logger.info("Starting export to Excel")
+    #             for symbol_key in self.export_buffer:
+    #                 if "entry" in symbol_key:
+    #                     self.export_to_excel({symbol_key: self.export_buffer[symbol_key]}, filename="5min_data.xlsx")
+    #                     logger.info(f"{symbol_key} - 5-minute data export completed")
+    #             for symbol_key in self.export_buffer:
+    #                 if "exit" in symbol_key:
+    #                     self.export_to_excel({symbol_key: self.export_buffer[symbol_key]}, filename="1min_data.xlsx")
+    #                     logger.info(f"{symbol_key} - 1-minute data export completed")
 
-            for ticker, df in dict_of_dfs.items():
-                sheet_name = ticker[:31] if len(ticker) > 31 else ticker
-
-                if sheet_name in workbook.sheetnames:
-                    worksheet = workbook[sheet_name]
-                    # starting_row = worksheet.max_row + 1
-                    for row in dataframe_to_rows(df, index=False,
-                                                 header=False):
-                        worksheet.append(row)
-                else:
-                    worksheet = workbook.create_sheet(title=sheet_name)
-                    for row in dataframe_to_rows(df, index=False, header=True):
-                        worksheet.append(row)
-
-                for column_cells in worksheet.columns:
-                    length = max(len(str(cell.value)) for cell in column_cells)
-                    worksheet.column_dimensions[column_cells[0].column_letter].width = length
-
-            workbook.save(filename)
-            print(f"Data successfully exported to {filename}")
-
-        except Exception as e:
-            print(f"Error writing to Excel: {str(e)}")
-
-    def export_to_excel_thread(self):
-        while True:
-            if self.export_buffer:
-                logger.info("Starting export to Excel")
-                for symbol_key in self.export_buffer:
-                    if "entry" in symbol_key:
-                        self.export_to_excel({symbol_key: self.export_buffer[symbol_key]}, filename="5min_data.xlsx")
-                        logger.info(f"{symbol_key} - 5-minute data export completed")
-                for symbol_key in self.export_buffer:
-                    if "exit" in symbol_key:
-                        self.export_to_excel({symbol_key: self.export_buffer[symbol_key]}, filename="1min_data.xlsx")
-                        logger.info(f"{symbol_key} - 1-minute data export completed")
-
-            sleep(300)
+            # sleep(300)
 
 
 

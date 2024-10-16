@@ -160,7 +160,7 @@ class IBApi(EClient, EWrapper):
         )
 
     def historicalDataEnd(self, reqId, start, end):
-        # ib_api_logger.info("Historical data download complete")
+        ib_api_logger.info("Historical data download complete")
         print("Historical data download complete")
         self.data_download_complete = True
         self.data_processor.data_ready_queue.put(self.data)
@@ -382,6 +382,10 @@ class IBApi(EClient, EWrapper):
         else:
             logger.warning(f"Contract not found for reqId: {reqId}")
             # print(f"Contract not found for reqId: {reqId}")
+
+    def tickString(self, reqId, tickType, value):
+        # Χρησιμοποίησε τον ib_api_logger για να κατευθύνεις τα tickString μηνύματα στο σωστό log file
+        ib_api_logger.info(f"tickString received. reqId: {reqId}, tickType: {tickType}, value: {value}")
 
     def create_order(self, orderId, action, orderType, quantity, limitPrice=None, auxPrice=None, outsideRth=False):
         order = Order()

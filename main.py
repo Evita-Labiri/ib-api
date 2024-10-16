@@ -138,8 +138,8 @@ def run_order_script():
     order_manager = OrderManager()
     data_processor.order_manager = order_manager
     logger.info("Connecting to TWS API...")
-    # app.connect("100.64.0.21", 7497, 1)
-    app.connect("100.64.0.69", 7497, 1)
+    app.connect("100.64.0.21", 7497, 1)
+    # app.connect("100.64.0.69", 7497, 1)
 
     t1 = threading.Thread(target=app.run)
     t1.start()
