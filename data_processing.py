@@ -1,13 +1,7 @@
-import os
 import queue
-import threading
-import zipfile
-from datetime import datetime, timedelta, time
-from time import sleep
+from datetime import datetime, timedelta
 
-import openpyxl
 import pandas as pd
-from openpyxl.utils.dataframe import dataframe_to_rows
 
 from order_manager import OrderManager
 import logging
@@ -207,7 +201,7 @@ class DataProcessor:
                     df.at[i, 'Long_Entry'] = True
                     self.data_in_long_position = True
                     self.order_manager.open_long_position()
-
+                #
                 # # For testing reasons
                 # if any(df.loc[i, entry_long_criteria]):
                 #     df.at[i, 'Long_Entry'] = True
@@ -230,11 +224,6 @@ class DataProcessor:
                 # if df['Close'].iloc[i - 1] > df['BB_Upper'].iloc[i - 1] and df['Close'].iloc[i - 2] <= df['BB_Upper'].iloc[
                 #     i - 2]:
                 #     df.at[i, 'Price_crossed_below_BB_Upper_short'] = True
-
-                # if any(df.loc[i, entry_short_criteria]):
-                #     df.at[i, 'Short_Entry'] = True
-                #     self.data_in_short_position = True
-                #     self.order_manager.open_short_position()
 
                 first_four_criteria_short = (
                         df.at[i, 'EMA9_below_EMA20_short'] and
@@ -317,7 +306,6 @@ class DataProcessor:
             'Volume': 'sum',
             'Ticker': 'first'
         }).ffill().reset_index()
-
         logger.info("Resampling Complete")
         return resampled_df
 
@@ -408,8 +396,8 @@ class DataProcessor:
 
             # print("Df_entry indicators")
             df_entry = self.calculate_indicators(df_entry)
-            logger.info("Entry Indicators")
-            logger.info("\n" + df_entry.tail(20).to_string())
+            # logger.info("Entry Indicators")
+            # logger.info("\n" + df_entry.tail(20).to_string())
             # print(df_entry.tail())
 
             # print("Df_entry signals")
@@ -425,8 +413,8 @@ class DataProcessor:
 
             # print("Df_exit indicators")
             df_exit = self.calculate_indicators(df_exit)
-            logger.info("Exit Indicators")
-            logger.info("\n" + df_exit.tail(20).to_string())
+            # logger.info("Exit Indicators")
+            # logger.info("\n" + df_exit.tail(20).to_string())
             # print("Df_exit signals")
 
             df_exit = self.generate_signals(df_exit)

@@ -19,7 +19,6 @@ logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.Strea
 
 class OrderManager:
     def __init__(self):
-        # self.app = app
         self.in_long_position = False
         self.in_short_position = False
         self.place_orders_outside_rth = False
@@ -41,11 +40,11 @@ class OrderManager:
                 print("Orders outside regular trading hours are not allowed.")
                 choice = input("Would you like to retry or return to the main menu? (retry/menu): ").strip().lower()
                 if choice == 'retry':
-                    continue  # Επιστρέφει στην αρχή της while loop για να προσπαθήσει ξανά
+                    continue
                 elif choice == 'menu':
                     logger.info("Returning to the main menu.")
                     print("Returning to the main menu.")
-                    return  # Επιστρέφει στο κεντρικό μενού (πρέπει να χειριστείς το επιστροφή στο μενού εκτός της συνάρτησης)
+                    return
                 else:
                     logger.warning("Invalid choice. Please try again.")
                     # print("Invalid choice. Please try again.")
@@ -139,7 +138,7 @@ class OrderManager:
                 break
 
     def get_position_to_close(self, position_type):
-        for position in reversed(self.positions):  # Ξεκινάμε από το τέλος της λίστας
+        for position in reversed(self.positions):
             if position['type'] == position_type and position['status'] == 'Open':
                 return position
         return None
@@ -167,6 +166,7 @@ class OrderManager:
         # print(f"Running process signals for {contract_symbol}")
         # with self.lock:
         signals = []
+        self.wait_for_market_time()
         #
         # if not isinstance(df_entry, pd.DataFrame):
         #     logger.info(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
@@ -279,11 +279,6 @@ class OrderManager:
         logger.info("Handle Decision running...")
         print("Handle Decision running...")
         while True:
-            # if stop_flag.is_set():
-            #     print("Stop flag detected in decision thread. Exiting.")
-            #     break
-
-            # with self.lock:
             try:
                 logger.info("Waiting for signal from queue...")
                 print("Waiting for signal from queue...")
@@ -291,7 +286,7 @@ class OrderManager:
                 logger.info(f"Signal received from queue: {signal}")
                 print(f"Signal received from queue: {signal}")
 
-                self.wait_for_market_time()
+                # self.wait_for_market_time()
 
                 contract_symbol, action, index, close_price, timestamp = signal
                 logger.info(f"Handling decision: {signal}")
@@ -312,31 +307,15 @@ class OrderManager:
 
                 outside_rth = self.place_orders_outside_rth
 
+                # Long Entry
                 if action == 'long':
                     logger.info(f"Initializing contract for long position: {contract_symbol}")
-                    # print(f"Initializing contract for long position: {contract_symbol}")
                     self.initialize_contract(contract_symbol)
-                    logger.debug(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
-                    # print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
 
                     quantity = 100
                     limit_price = close_price - (30 / quantity)
                     profit_target_price = close_price + (100 / quantity)
                     stop_loss_price = close_price - (61 / quantity)
-
-                    # orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
-                    #                                  stop_loss_price,
-                    #                                  outside_rth=outside_rth)
-                    # if orders:
-                    #     print(f"Orders placed for {contract_symbol}: {orders}")
-                    #     self.positions[contract_symbol]['in_long_position'] = True
-                    #     self.positions[contract_symbol]['in_short_position'] = False
-                    #     self.positions[contract_symbol]['order_id'] = app.nextValidOrderId
-                    #     self.positions[contract_symbol]['status'] = 'Pre-Submitted'
-                    #     print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
-                    #     self.display_positions()
-                    # else:
-                    #     print(f"Failed to place orders for {contract_symbol}.")
 
                     orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
                                                      stop_loss_price,
@@ -344,14 +323,12 @@ class OrderManager:
                     if orders:
                         logger.info(f"Orders placed for {contract_symbol}: {orders}")
                         print(f"Orders placed for {contract_symbol}: {orders}")
-                        # Only update the position and order ID after a successful placement and increment the order ID
                         self.positions[contract_symbol]['in_long_position'] = True
                         self.positions[contract_symbol]['in_short_position'] = False
-                        self.positions[contract_symbol]['order_id'] = orders[
-                            0].orderId  # Ensure the correct order ID is assigned
+                        self.positions[contract_symbol]['order_id'] = orders[0].orderId
                         sleep(2)
                         # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                        logger.debug(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+                        logger.info(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
                         # print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
                         self.display_positions()
                     else:
@@ -359,6 +336,7 @@ class OrderManager:
                         print(f"Failed to place orders for {contract_symbol}.")
                         self.alert_active[contract_symbol] = False
 
+                # Short Entry
                 elif action == 'short':
                     logger.info(f"Initializing contract for short position: {contract_symbol}")
                     # print(f"Initializing contract for short position: {contract_symbol}")
@@ -389,92 +367,374 @@ class OrderManager:
                         logger.error(f"Failed to place orders for {contract_symbol}.")
                         # print(f"Failed to place orders for {contract_symbol}.")
                         self.alert_active[contract_symbol] = False
+
+                # Exit Long Position
                 elif action == 'exit_long':
-                    logger.info(f"{contract_symbol} - Long Exit detected. Closing open BUY position...")
-                    print(f"{contract_symbol} - Long Exit detected. Closing open BUY position...")
-                    self.initialize_contract(contract_symbol)
+                    logger.info(
+                        f"{contract_symbol} - Long Exit detected. Closing open BUY position with market order...")
+                    print(f"{contract_symbol} - Long Exit detected. Closing open BUY position with market order...")
+
+                    app.cancel_open_order(self.positions[contract_symbol]['order_id'])
+
                     position_to_close = self.positions[contract_symbol]
                     if position_to_close['in_long_position']:
-                        close_order_id = app.nextValidOrderId
                         quantity = 100
-                        limit_price = close_price
-                        profit_target_price = close_price - (100 / quantity)
-                        stop_loss_price = close_price + (30 / quantity)
 
-                        orders = app.place_bracket_order(contract, "SELL", quantity, limit_price, profit_target_price,
-                                                         stop_loss_price, outside_rth=outside_rth)
-                        if orders:
-                            logger.info(f"Orders placed to close position for {contract_symbol}: {orders}")
-                            print(f"Orders placed to close position for {contract_symbol}: {orders}")
-                            # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                            self.positions[contract_symbol]['in_long_position'] = False
-                            sleep(2)
-                        else:
-                            logger.error(f"Failed to place exit orders for {contract_symbol}.")
-                            print(f"Failed to place exit orders for {contract_symbol}.")
-                            self.alert_active[contract_symbol] = False
+                        market_order = app.create_order(app.nextValidOrderId, "SELL", "MKT", quantity)
+                        app.placeOrder(app.nextValidOrderId, contract, market_order)
+                        app.nextValidOrderId += 1
 
+                        logger.info(f"Market order placed to close long position for {contract_symbol}")
+                        print(f"Market order placed to close long position for {contract_symbol}")
+
+                        self.positions[contract_symbol]['in_long_position'] = False
+                        self.positions[contract_symbol]['order_id'] = None
+                        sleep(2)
+                    else:
+                        logger.error(f"No open long position for {contract_symbol} to close.")
+                        print(f"No open long position for {contract_symbol} to close.")
+
+                # Exit Short Position
                 elif action == 'exit_short':
-                    logger.info(f"{contract_symbol} - Short Exit detected. Closing open SELL position...")
-                    print(f"{contract_symbol} - Short Exit detected. Closing open SELL position...")
-                    self.initialize_contract(contract_symbol)
+                    logger.info(
+                        f"{contract_symbol} - Short Exit detected. Closing open SELL position with market order...")
+                    print(f"{contract_symbol} - Short Exit detected. Closing open SELL position with market order...")
+
+                    app.cancel_open_order(self.positions[contract_symbol]['order_id'])
+
                     position_to_close = self.positions[contract_symbol]
                     if position_to_close['in_short_position']:
-                        close_order_id = app.nextValidOrderId
                         quantity = 100
-                        limit_price = close_price
-                        profit_target_price = close_price + (100 / quantity)
-                        stop_loss_price = close_price - (30 / quantity)
 
-                        orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
-                                                         stop_loss_price, outside_rth=outside_rth)
-                        if orders:
-                            logger.info(f"Orders placed to close short position for {contract_symbol}: {orders}")
-                            # print(f"Orders placed to close short position for {contract_symbol}: {orders}")
-                            # Τοποθετούμε το position ως "Pre-Submitted" και θα ενημερωθεί με το status όταν γίνει filled
-                            # self.positions[contract_symbol]['status'] = 'PreSubmitted'
-                            self.positions[contract_symbol]['in_short_position'] = False
-                            sleep(2)
-                        else:
-                            logger.error(f"Failed to place exit orders for {contract_symbol}.")
-                            # print(f"Failed to place exit orders for {contract_symbol}.")
-                            self.alert_active[contract_symbol] = False
+                        market_order = app.create_order(app.nextValidOrderId, "BUY", "MKT", quantity)
+                        app.placeOrder(app.nextValidOrderId, contract, market_order)
+                        app.nextValidOrderId += 1
+
+                        logger.info(f"Market order placed to close short position for {contract_symbol}")
+                        print(f"Market order placed to close short position for {contract_symbol}")
+
+                        self.positions[contract_symbol]['in_short_position'] = False
+                        self.positions[contract_symbol]['order_id'] = None
+                        sleep(2)
+                    else:
+                        logger.error(f"No open short position for {contract_symbol} to close.")
+                        print(f"No open short position for {contract_symbol} to close.")
+
                 decision_flag.set()
+
             except Empty:
-                logger.warning("Timeout waiting for signal from queue. No signals received.")
+                logger.info("Timeout waiting for signal from queue. No signals received.")
                 print("Timeout waiting for signal from queue. No signals received.")
                 continue
+
             except Exception as e:
                 logger.exception(f"An unexpected error occurred: {str(e)}")
                 print(f"An unexpected error occurred: {str(e)}")
                 continue
 
+    #
+    # def handle_decision(self, app, decision_queue, decision_flag):
+    #     logger.info("Handle Decision running...")
+    #     print("Handle Decision running...")
+    #     while True:
+    #         # if stop_flag.is_set():
+    #         #     print("Stop flag detected in decision thread. Exiting.")
+    #         #     break
+    #
+    #         # with self.lock:
+    #         try:
+    #             logger.info("Waiting for signal from queue...")
+    #             print("Waiting for signal from queue...")
+    #             signal = decision_queue.get(timeout=30)
+    #             logger.info(f"Signal received from queue: {signal}")
+    #             print(f"Signal received from queue: {signal}")
+    #
+    #             self.wait_for_market_time()
+    #
+    #             contract_symbol, action, index, close_price, timestamp = signal
+    #             logger.info(f"Handling decision: {signal}")
+    #             print(f"Handling decision: {signal}")
+    #
+    #             contract = next((c['contract'] for c in app.contracts if c['contract'].symbol == contract_symbol), None)
+    #             if contract is None:
+    #                 logger.error(f"Contract not found for symbol: {contract_symbol}")
+    #                 print(f"Contract not found for symbol: {contract_symbol}")
+    #                 continue
+    #
+    #             while app.nextValidOrderId is None:
+    #                 logger.info("Waiting for next valid order ID...")
+    #                 print("Waiting for next valid order ID...")
+    #                 sleep(1)
+    #             logger.info(f"Next valid order ID is {app.nextValidOrderId}")
+    #             print(f"Next valid order ID is {app.nextValidOrderId}")
+    #
+    #             outside_rth = self.place_orders_outside_rth
+    #
+    #             if action == 'long':
+    #                 logger.info(f"Initializing contract for long position: {contract_symbol}")
+    #                 # print(f"Initializing contract for long position: {contract_symbol}")
+    #                 self.initialize_contract(contract_symbol)
+    #                 logger.debug(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+    #                 # print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+    #
+    #                 quantity = 100
+    #                 limit_price = close_price - (30 / quantity)
+    #                 profit_target_price = close_price + (100 / quantity)
+    #                 stop_loss_price = close_price - (61 / quantity)
+    #
+    #                 # orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
+    #                 #                                  stop_loss_price,
+    #                 #                                  outside_rth=outside_rth)
+    #                 # if orders:
+    #                 #     print(f"Orders placed for {contract_symbol}: {orders}")
+    #                 #     self.positions[contract_symbol]['in_long_position'] = True
+    #                 #     self.positions[contract_symbol]['in_short_position'] = False
+    #                 #     self.positions[contract_symbol]['order_id'] = app.nextValidOrderId
+    #                 #     self.positions[contract_symbol]['status'] = 'Pre-Submitted'
+    #                 #     print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+    #                 #     self.display_positions()
+    #                 # else:
+    #                 #     print(f"Failed to place orders for {contract_symbol}.")
+    #
+    #                 orders = app.place_bracket_order(contract, "BUY", quantity, limit_price, profit_target_price,
+    #                                                  stop_loss_price,
+    #                                                  outside_rth=outside_rth)
+    #                 if orders:
+    #                     logger.info(f"Orders placed for {contract_symbol}: {orders}")
+    #                     print(f"Orders placed for {contract_symbol}: {orders}")
+    #                     # Only update the position and order ID after a successful placement and increment the order ID
+    #                     self.positions[contract_symbol]['in_long_position'] = True
+    #                     self.positions[contract_symbol]['in_short_position'] = False
+    #                     self.positions[contract_symbol]['order_id'] = orders[
+    #                         0].orderId  # Ensure the correct order ID is assigned
+    #                     sleep(2)
+    #                     # self.positions[contract_symbol]['status'] = 'PreSubmitted'
+    #                     logger.debug(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+    #                     # print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+    #                     self.display_positions()
+    #                 else:
+    #                     logger.error(f"Failed to place orders for {contract_symbol}.")
+    #                     print(f"Failed to place orders for {contract_symbol}.")
+    #                     self.alert_active[contract_symbol] = False
+    #
+    #             elif action == 'short':
+    #                 logger.info(f"Initializing contract for short position: {contract_symbol}")
+    #                 # print(f"Initializing contract for short position: {contract_symbol}")
+    #                 self.initialize_contract(contract_symbol)
+    #                 logger.debug(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+    #                 # print(f"Contract {contract_symbol} after initialization: {self.positions[contract_symbol]}")
+    #
+    #                 quantity = 100
+    #                 limit_price = close_price + (30 / quantity)
+    #                 profit_target_price = limit_price - (100 / quantity)
+    #                 stop_loss_price = close_price + (61 / quantity)
+    #
+    #                 orders = app.place_bracket_order(contract, "SELL", quantity, limit_price, profit_target_price,
+    #                                                  stop_loss_price, outside_rth=outside_rth)
+    #                 if orders:
+    #                     logger.info(f"Orders placed for {contract_symbol}: {orders}")
+    #                     # print(f"Orders placed for {contract_symbol}: {orders}")
+    #                     self.positions[contract_symbol]['in_short_position'] = True
+    #                     self.positions[contract_symbol]['in_long_position'] = False
+    #                     self.positions[contract_symbol]['order_id'] = orders[
+    #                         0].orderId  # Ensuring the correct order ID is assigned from the first order
+    #                     sleep(2)
+    #                     # self.positions[contract_symbol]['status'] = 'PreSubmitted'
+    #                     logger.debug(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+    #                     # print(f"Updated positions for {contract_symbol}: {self.positions[contract_symbol]}")
+    #                     self.display_positions()
+    #                 else:
+    #                     logger.error(f"Failed to place orders for {contract_symbol}.")
+    #                     # print(f"Failed to place orders for {contract_symbol}.")
+    #                     self.alert_active[contract_symbol] = False
+    #             elif action == 'exit_long':
+    #                 logger.info(
+    #                     f"{contract_symbol} - Long Exit detected. Closing open BUY position with market order...")
+    #                 print(f"{contract_symbol} - Long Exit detected. Closing open BUY position with market order...")
+    #
+    #                 # Ακύρωση των ανοιχτών bracket orders
+    #                 app.cancel_open_order(self.positions[contract_symbol]['order_id'])
+    #                 app.cancel_open_order(self.profit_taker_order_id)
+    #                 app.cancel_open_order(self.stop_loss_order_id)
+    #
+    #                 position_to_close = self.positions[contract_symbol]
+    #                 if position_to_close['in_long_position']:
+    #                     quantity = 100
+    #
+    #                     # Δημιουργία market order για να κλείσει η long θέση
+    #                     market_order = app.create_order(app.nextValidOrderId, "SELL", "MKT", quantity)
+    #                     app.placeOrder(app.nextValidOrderId, contract, market_order)
+    #                     app.nextValidOrderId += 1
+    #
+    #                     logger.info(f"Market order placed to close long position for {contract_symbol}")
+    #                     print(f"Market order placed to close long position for {contract_symbol}")
+    #
+    #                     self.positions[contract_symbol]['in_long_position'] = False
+    #                     self.positions[contract_symbol]['order_id'] = None
+    #                     sleep(2)
+    #                 else:
+    #                     logger.error(f"No open long position for {contract_symbol} to close.")
+    #                     print(f"No open long position for {contract_symbol} to close.")
+    #
+    #             elif action == 'exit_short':
+    #                 logger.info(
+    #                     f"{contract_symbol} - Short Exit detected. Closing open SELL position with market order...")
+    #                 print(f"{contract_symbol} - Short Exit detected. Closing open SELL position with market order...")
+    #
+    #                 # Ακύρωση των ανοιχτών bracket orders
+    #                 app.cancel_open_order(self.positions[contract_symbol]['order_id'])
+    #                 app.cancel_open_order(self.profit_taker_order_id)
+    #                 app.cancel_open_order(self.stop_loss_order_id)
+    #
+    #                 position_to_close = self.positions[contract_symbol]
+    #                 if position_to_close['in_short_position']:
+    #                     quantity = 100
+    #
+    #                     # Δημιουργία market order για να κλείσει η short θέση
+    #                     market_order = app.create_order(app.nextValidOrderId, "BUY", "MKT", quantity)
+    #                     app.placeOrder(app.nextValidOrderId, contract, market_order)
+    #                     app.nextValidOrderId += 1
+    #
+    #                     logger.info(f"Market order placed to close short position for {contract_symbol}")
+    #                     print(f"Market order placed to close short position for {contract_symbol}")
+    #
+    #                     self.positions[contract_symbol]['in_short_position'] = False
+    #                     self.positions[contract_symbol]['order_id'] = None
+    #                     sleep(2)
+    #                 else:
+    #                     logger.error(f"No open short position for {contract_symbol} to close.")
+    #                     print(f"No open short position for {contract_symbol} to close.")
+    #
+    #                     if orders:
+    #                         logger.info(f"Orders placed to close short position for {contract_symbol}: {orders}")
+    #                         # print(f"Orders placed to close short position for {contract_symbol}: {orders}")
+    #                         # Τοποθετούμε το position ως "Pre-Submitted" και θα ενημερωθεί με το status όταν γίνει filled
+    #                         # self.positions[contract_symbol]['status'] = 'PreSubmitted'
+    #                         self.positions[contract_symbol]['in_short_position'] = False
+    #                         sleep(2)
+    #                     else:
+    #                         logger.error(f"Failed to place exit orders for {contract_symbol}.")
+    #                         # print(f"Failed to place exit orders for {contract_symbol}.")
+    #                         self.alert_active[contract_symbol] = False
+    #             decision_flag.set()
+    #         except Empty:
+    #             logger.info("Timeout waiting for signal from queue. No signals received.")
+    #             print("Timeout waiting for signal from queue. No signals received.")
+    #             continue
+    #         except Exception as e:
+    #             logger.exception(f"An unexpected error occurred: {str(e)}")
+    #             print(f"An unexpected error occurred: {str(e)}")
+    #             continue
+
+    # def wait_for_market_time(self):
+    #     # print("Waiting")
+    #     logging.info("Checking for market time...")
+    #     print("Checking market time...")
+    #     est = pytz.timezone('America/New_York')
+    #     now = datetime.now(est)
+    #     # print(f"Current time {now}")
+    #     market_open_time_naive = datetime(now.year, now.month, now.day, 9, 30)
+    #     market_open_time = est.localize(market_open_time_naive)
+    #     ten_minutes_after_open = market_open_time + timedelta(minutes=10)
+    #     # print(f"Now: {now}")
+    #     # print(f"Market open time: {market_open_time}")
+    #     # print(f"10 minutes after open: {ten_minutes_after_open}")
+    #
+    #     # if now >= ten_minutes_after_open:
+    #     #     print("It's past 10 minutes after market open, proceeding...")
+    #     # else:
+    #     #     print("Waiting for 10 minutes after market open.")
+    #     if now < ten_minutes_after_open:
+    #         wait_seconds = (ten_minutes_after_open - now).total_seconds()
+    #         wait_minutes = wait_seconds / 60
+    #
+    #         logging.info(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
+    #         print(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
+    #
+    #         sleep(wait_seconds)
+
+    # def wait_for_market_time(self):
+    #     logging.info("Checking for market time...")
+    #     print("Checking market time...")
+    #
+    #     # Set up timezone for Eastern Time (New York)
+    #     est = pytz.timezone('America/New_York')
+    #     now = datetime.now(est)
+    #
+    #     # Market open time (9:30 AM) and market close time (4:00 PM)
+    #     market_open_time_naive = datetime(now.year, now.month, now.day, 9, 30)
+    #     market_close_time_naive = datetime(now.year, now.month, now.day, 16, 0)
+    #
+    #     # Localize the times to EST timezone
+    #     market_open_time = est.localize(market_open_time_naive)
+    #     market_close_time = est.localize(market_close_time_naive)
+    #
+    #     ten_minutes_after_open = market_open_time + timedelta(minutes=10)
+    #
+    #     # If the market is not open yet (pre-market) or it is closed (after-market)
+    #     if now < ten_minutes_after_open:
+    #         wait_seconds = (ten_minutes_after_open - now).total_seconds()
+    #         wait_minutes = wait_seconds / 60
+    #         logging.info(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
+    #         print(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
+    #         sleep(wait_seconds)
+    #
+    #     elif now > market_close_time:
+    #         # If after-market hours, calculate the time until the next day's market open
+    #         next_market_open_time = market_open_time_naive + timedelta(days=1)
+    #         next_market_open_time = est.localize(next_market_open_time)
+    #         wait_seconds = (next_market_open_time - now).total_seconds()
+    #         wait_hours = wait_seconds / 3600
+    #         logging.info(f"Market is closed. Waiting {wait_hours:.2f} hours until next market open...")
+    #         print(f"Market is closed. Waiting {wait_hours:.2f} hours until next market open...")
+    #         sleep(wait_seconds)
+    #
+    #     elif now >= market_open_time and now <= market_close_time:
+    #         logging.info("Market is open. Proceeding with orders.")
+    #         print("Market is open. Proceeding with orders.")
+
     def wait_for_market_time(self):
-        # print("Waiting")
         logging.info("Checking for market time...")
         print("Checking market time...")
+
+        # Set up timezone for Eastern Time (New York)
         est = pytz.timezone('America/New_York')
         now = datetime.now(est)
-        # print(f"Current time {now}")
-        market_open_time_naive = datetime(now.year, now.month, now.day, 9, 30)
-        market_open_time = est.localize(market_open_time_naive)
-        ten_minutes_after_open = market_open_time + timedelta(minutes=10)
-        # print(f"Now: {now}")
-        # print(f"Market open time: {market_open_time}")
-        # print(f"10 minutes after open: {ten_minutes_after_open}")
 
-        # if now >= ten_minutes_after_open:
-        #     print("It's past 10 minutes after market open, proceeding...")
-        # else:
-        #     print("Waiting for 10 minutes after market open.")
+        # Market open time (9:30 AM) and market close time (4:00 PM)
+        market_open_time_naive = datetime(now.year, now.month, now.day, 9, 30)
+        market_close_time_naive = datetime(now.year, now.month, now.day, 16, 0)
+
+        # Localize the times to EST timezone
+        market_open_time = est.localize(market_open_time_naive)
+        market_close_time = est.localize(market_close_time_naive)
+
+        ten_minutes_after_open = market_open_time + timedelta(minutes=10)
+
         if now < ten_minutes_after_open:
             wait_seconds = (ten_minutes_after_open - now).total_seconds()
             wait_minutes = wait_seconds / 60
-
             logging.info(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
             print(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
-
             sleep(wait_seconds)
+
+        elif now >= market_close_time:
+            self.close_open_positions_and_cancel_orders()
+            logging.info("Market is closed. All positions closed and orders cancelled.")
+            print("Market is closed. All positions closed and orders cancelled.")
+
+            # Calculate the next market open time
+            next_market_open_time = market_open_time_naive + timedelta(days=1)
+            next_market_open_time = est.localize(next_market_open_time)
+            wait_seconds = (next_market_open_time - now).total_seconds()
+            wait_hours = wait_seconds / 3600
+            logging.info(f"Waiting {wait_hours:.2f} hours until next market open...")
+            print(f"Waiting {wait_hours:.2f} hours until next market open...")
+            sleep(wait_seconds)
+
+        elif now >= market_open_time and now < market_close_time:
+            logging.info("Market is open. Proceeding with orders.")
+            print("Market is open. Proceeding with orders.")
 
     def handle_order_execution(self, orderId, status):
         # with self.lock:
@@ -492,7 +752,6 @@ class OrderManager:
                 #     print(f"Order {orderId} for {contract_symbol} is still in {status}. Position open.")
 
                 if status in ['PreSubmitted', 'PendingSubmit', 'Submitted']:
-                    # Καθορισμός της θέσης ως ανοιχτή (αμέσως μόλις η εντολή τοποθετείται)
                     if 'BUY' in orderId:
                         self.positions[contract_symbol]['in_long_position'] = True
                         self.positions[contract_symbol]['in_short_position'] = False
@@ -536,6 +795,36 @@ class OrderManager:
     #     print("2 ώρες έχουν περάσει. Τερματισμός προγράμματος.")
     #     sys.exit(0)
 
+    def close_open_positions_and_cancel_orders(self):
+        from ib_api import IBApi
+        from data_processing import DataProcessor
+        from database import Database
+
+        db = Database()
+        data_processor = DataProcessor(db, api_helper)
+        app = IBApi(data_processor, db)
+        logging.info("Closing all open positions and cancelling unfilled orders at market close.")
+        print("Closing all open positions and cancelling unfilled orders at market close.")
+
+        open_positions = app.get_open_positions()
+        for position in open_positions:
+            contract = position.contract
+            action = "SELL" if position.position > 0 else "BUY"
+            quantity = abs(position.position)
+
+            close_order = app.create_order(app.nextValidOrderId, action, "MKT", quantity)
+            app.placeOrder(app.nextValidOrderId, contract, close_order)
+            app.nextValidOrderId += 1
+
+            logging.info(f"Closed position for {contract.symbol} with action {action} and quantity {quantity}.")
+            print(f"Closed position for {contract.symbol} with action {action} and quantity {quantity}.")
+
+        open_orders = app.get_open_orders()
+        for order in open_orders:
+            app.cancel_open_order(order.orderId)
+            logging.info(f"Cancelled unfilled order ID {order.orderId} for {order.contract.symbol}.")
+            print(f"Cancelled unfilled order ID {order.orderId} for {order.contract.symbol}.")
+
     def listen_for_esc(self, decision_queue, stop_flag):
         while True:
             # na prosthesw to close order
@@ -573,3 +862,4 @@ class OrderManager:
             else:
                 logger.warning("Invalid choice. Please try again.")
                 print("Invalid choice. Please try again.")
+

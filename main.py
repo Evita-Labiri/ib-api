@@ -315,9 +315,9 @@ def run_order_script():
                                        args=(app, decision_queue, decision_flag))
     decision_thread.start()
 
-    logger.info("All tickers processed, starting export to Excel.")
-    export_thread = threading.Thread(target= data_processor.export_to_excel_thread)
-    export_thread.start()
+    # logger.info("All tickers processed, starting export to Excel.")
+    # export_thread = threading.Thread(target= data_processor.export_to_excel_thread)
+    # export_thread.start()
 
     try:
         while not stop_flag.is_set():
@@ -338,8 +338,8 @@ def run_order_script():
     finally:
         logger.info("Finally clause activated. Closing connections and joining threads.")
         # print("Finally clause activated")
-        if data_processor.export_buffer:
-            data_processor.export_to_excel(data_processor.export_buffer, filename="final_output.xlsx")
+        # if data_processor.export_buffer:
+        #     data_processor.export_to_excel(data_processor.export_buffer, filename="final_output.xlsx")
         app.close_connection()
         stop_flag.set()
         decision_flag.set()

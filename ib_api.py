@@ -46,7 +46,7 @@ class IBApi(EClient, EWrapper):
         self.real_time_data = {}
         self.lock = threading.Lock()
         self.ticker = None
-        self.historical_data_downloaded = False  # Flag to check if historical data is downloaded
+        self.historical_data_downloaded = False
         self.ohlcv_data = {}
         self.data_processor = data_processor
         self.db = db
@@ -58,6 +58,10 @@ class IBApi(EClient, EWrapper):
         self.contracts = []
         self.current_reqId = 1
         self.reqId_info = {}
+        self.open_orders = []
+        self.open_positions = []
+        self.positions_fetched = False
+        self.reqPositions()
 
 
     def set_ticker(self, ticker):
@@ -93,8 +97,13 @@ class IBApi(EClient, EWrapper):
         self.order_manager.handle_order_execution(orderId, status)
 
     def openOrder(self, orderId, contract, order, orderState):
-        print(
-            f"Open Order - orderId: {orderId}, contract: {contract.symbol}, orderType: {order.orderType}, action: {order.action}, totalQuantity: {order.totalQuantity}")
+        print(f"Open Order - orderId: {orderId}, contract: {contract.symbol}, action: {order.action}")
+        self.open_orders.append({
+            'orderId': orderId,
+            'contract': contract,
+            'order': order,
+            'orderState': orderState
+        })
 
     def execDetails(self, reqId, contract, execution):
         print(
@@ -470,39 +479,100 @@ class IBApi(EClient, EWrapper):
                 logger.error(f"Error placing bracket order: {str(e)}")
                 # print(f"Error placing bracket order: {str(e)}")
                 return None
+    #
+    # def cancel_open_order(self, order_id):
+    #     logger.info(f"Cancelling order ID: {order_id}")
+    #     print(f"Cancelling order ID: {order_id}")
+    #     # manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+    #     # self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
+    #     # OrderManager.in_long_position = False
+    #     # OrderManager.in_short_position = False
+    #     # OrderManager.alert_active = False
+    #
+    # # def cancel_open_order(self, order_id):
+    # #     if order_id is None:
+    # #         print(f"Cannot cancel order: Invalid order ID")
+    # #         return
+    # #
+    # #     print(f"Cancelling order ID: {order_id}")
+    #
+    #     try:
+    #         manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+    #         self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
+    #         logger.info(f"Order {order_id} cancelled successfully.")
+    #         print(f"Order {order_id} cancelled successfully.")
+    #
+    #         if order_id == self.entry_order_id:
+    #             OrderManager.in_long_position = False
+    #             OrderManager.in_short_position = False
+    #             OrderManager.alert_active = False
+    #             logger.info(f"Flags updated after cancelling order {order_id}")
+    #             # print(f"Flags updated after cancelling order {order_id}")
+    #
+    #     except Exception as e:
+    #         logger.error(f"Failed to cancel order {order_id}: {e}")
+    #         print(f"Failed to cancel order {order_id}: {e}")
+
+    def get_open_orders(self):
+        self.open_orders = []
+        self.reqOpenOrders()
+        return self.open_orders
 
     def cancel_open_order(self, order_id):
-        logger.info(f"Cancelling order ID: {order_id}")
-        print(f"Cancelling order ID: {order_id}")
-        # manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
-        # self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
-        # OrderManager.in_long_position = False
-        # OrderManager.in_short_position = False
-        # OrderManager.alert_active = False
-
-    # def cancel_open_order(self, order_id):
-    #     if order_id is None:
-    #         print(f"Cannot cancel order: Invalid order ID")
-    #         return
-    #
-    #     print(f"Cancelling order ID: {order_id}")
+        """
+        Cancels the open order with the specified order_id.
+        """
+        if order_id is None:
+            logger.error("Cannot cancel order: Invalid order ID")
+            print("Cannot cancel order: Invalid order ID")
+            return
 
         try:
-            manual_cancel_order_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
-            self.cancelOrder(order_id, manualCancelOrderTime=manual_cancel_order_time)
+            logger.info(f"Cancelling order ID: {order_id}")
+            print(f"Cancelling order ID: {order_id}")
+
+            self.cancelOrder(order_id)
             logger.info(f"Order {order_id} cancelled successfully.")
             print(f"Order {order_id} cancelled successfully.")
 
-            if order_id == self.entry_order_id:
-                OrderManager.in_long_position = False
-                OrderManager.in_short_position = False
-                OrderManager.alert_active = False
-                logger.info(f"Flags updated after cancelling order {order_id}")
-                # print(f"Flags updated after cancelling order {order_id}")
+            for contract_symbol, position in self.order_manager.positions.items():
+                if position['order_id'] == order_id:
+                    position['in_long_position'] = False
+                    position['in_short_position'] = False
+                    position['order_id'] = None
+                    logger.info(f"Flags updated after cancelling order {order_id} for {contract_symbol}")
+                    print(f"Flags updated after cancelling order {order_id} for {contract_symbol}")
+                    break
 
         except Exception as e:
             logger.error(f"Failed to cancel order {order_id}: {e}")
             print(f"Failed to cancel order {order_id}: {e}")
+
+    def position(self, account, contract, position, avgCost):
+        """Αυτή η μέθοδος καλείται ασύγχρονα όταν λαμβάνεις μια θέση."""
+        print(f"Received position: {contract.symbol}, {position} shares")
+        self.open_positions.append({
+            'contract': contract,
+            'position': position,
+            'avgCost': avgCost
+        })
+
+    def positionEnd(self):
+        """Αυτή η μέθοδος καλείται όταν όλες οι θέσεις έχουν ληφθεί."""
+        print("All positions received.")
+        self.positions_fetched = True
+
+    def get_open_positions(self):
+        """Αυτή η μέθοδος επιστρέφει τις ανοιχτές θέσεις."""
+        # Polling mechanism:
+        start_time = time()
+        timeout = 5
+        while not self.positions_fetched:
+            if time() - start_time > timeout:
+                print("Timeout while waiting for open positions.")
+                break
+            sleep(0.1)
+        return self.open_positions
 
     def create_contract(self, symbol, sec_type, exchange, currency, data_type, reqId=None):
         contract = Contract()
