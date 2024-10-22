@@ -52,52 +52,52 @@ class OrderManager:
                 logger.warning("Invalid input. Please enter 'yes' or 'no'.")
                 # print("Invalid input. Please enter 'yes' or 'no'.")
 
-    def is_market_open(self):
-        now = datetime.now(pytz.timezone('America/New_York'))
-        logger.info(f"Current time in NY: {now}")
-        # print(f"Current time in NY: {now}")
-        market_open = time(9, 30)
-        market_close = time(16, 0)
-        if now.weekday() >= 5:  # If it's Saturday(5) or Sunday(6)
-            logger.info("Market is closed because it's the weekend.")
-            return False
-        if market_open <= now.time() <= market_close:
-            logger.info("Market is currently open.")
-            print("Market is currently open.")
-            return True
-        else:
-            logger.info("Market is closed at this time.")
-            print("Market is closed at this time.")
-            return False
+    # def is_market_open(self):
+    #     now = datetime.now(pytz.timezone('America/New_York'))
+    #     logger.info(f"Current time in NY: {now}")
+    #     # print(f"Current time in NY: {now}")
+    #     market_open = time(9, 30)
+    #     market_close = time(16, 0)
+    #     if now.weekday() >= 5:  # If it's Saturday(5) or Sunday(6)
+    #         logger.info("Market is closed because it's the weekend.")
+    #         return False
+    #     if market_open <= now.time() <= market_close:
+    #         logger.info("Market is currently open.")
+    #         print("Market is currently open.")
+    #         return True
+    #     else:
+    #         logger.info("Market is closed at this time.")
+    #         print("Market is closed at this time.")
+    #         return False
 
-    def get_order_details_from_user(self, action):
-        quantity = int(input(f"Enter quantity for {action} order: "))
-        limit_price = float(input(f"Enter limit price for {action} order: "))
-        profit_target = float(input(f"Enter profit target for {action} order: "))
-        stop_loss = float(input(f"Enter stop loss for {action} order: "))
-        logger.info(f"Order details for {action}: quantity={quantity}, limit_price={limit_price}, profit_target={profit_target}, stop_loss={stop_loss}")
-        return quantity, limit_price, profit_target, stop_loss
+    # def get_order_details_from_user(self, action):
+    #     quantity = int(input(f"Enter quantity for {action} order: "))
+    #     limit_price = float(input(f"Enter limit price for {action} order: "))
+    #     profit_target = float(input(f"Enter profit target for {action} order: "))
+    #     stop_loss = float(input(f"Enter stop loss for {action} order: "))
+    #     logger.info(f"Order details for {action}: quantity={quantity}, limit_price={limit_price}, profit_target={profit_target}, stop_loss={stop_loss}")
+    #     return quantity, limit_price, profit_target, stop_loss
 
-    def check_and_place_order(self, contract, action, quantity, limit_price, profit_target, stop_loss):
-        import data_processing
-        import database
-        import ib_api
-        db = database.Database
-        data_processor = data_processing.DataProcessor(db)
-        app = ib_api.IBApi(data_processor, db)
+    # def check_and_place_order(self, contract, action, quantity, limit_price, profit_target, stop_loss):
+    #     import data_processing
+    #     import database
+    #     import ib_api
+    #     db = database.Database
+    #     data_processor = data_processing.DataProcessor(db)
+    #     app = ib_api.IBApi(data_processor, db)
+    #
+    #     if self.place_orders_outside_rth or self.is_market_open():
+    #         app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss,
+    #                                      outside_rth=self.place_orders_outside_rth)
+    #         logger.info(f"Placed {action} order for {quantity} shares at {limit_price}")
+    #         # print(f"Placed {action} order for {quantity} shares at {limit_price}")
+    #     else:
+    #         logger.warning("Market is closed and order placing outside RTH is not allowed.")
+    #         # print("Market is closed and order placing outside RTH is not allowed.")
 
-        if self.place_orders_outside_rth or self.is_market_open():
-            app.place_bracket_order(contract, action, quantity, limit_price, profit_target, stop_loss,
-                                         outside_rth=self.place_orders_outside_rth)
-            logger.info(f"Placed {action} order for {quantity} shares at {limit_price}")
-            # print(f"Placed {action} order for {quantity} shares at {limit_price}")
-        else:
-            logger.warning("Market is closed and order placing outside RTH is not allowed.")
-            # print("Market is closed and order placing outside RTH is not allowed.")
-
-    def send_alert(self, message):
-        logger.info(f"ALERT: {message}")
-        # print(f"ALERT: {message}")
+    # def send_alert(self, message):
+    #     logger.info(f"ALERT: {message}")
+    #     # print(f"ALERT: {message}")
 
     # def wait_for_user_decision(self, message):
     #     while True:
@@ -166,8 +166,10 @@ class OrderManager:
         # print(f"Running process signals for {contract_symbol}")
         # with self.lock:
         signals = []
-        self.wait_for_market_time()
-        #
+        if not self.wait_for_market_time():
+            logger.info(f"Skipping order placement for {contract_symbol} because market is not open.")
+            print(f"Skipping order placement for {contract_symbol} because market is not open.")
+            return        #
         # if not isinstance(df_entry, pd.DataFrame):
         #     logger.info(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
         #     print(f"Error: df_entry is not a DataFrame but a {type(df_entry)}")
@@ -192,7 +194,16 @@ class OrderManager:
             if pd.api.types.is_datetime64_any_dtype(timestamp):
                 timestamp = timestamp.tz_localize(None)
 
-            # long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
+            est = pytz.timezone('America/New_York')
+            nine_forty_am = est.localize(datetime(timestamp.year, timestamp.month, timestamp.day, 9, 40))
+            if timestamp < nine_forty_am:
+                logger.info(
+                    f"Skipping signals for {contract_symbol} because the timestamp {timestamp} is before 9:40 AM.")
+                print(
+                    f"Skipping signals for {contract_symbol} because the timestamp {timestamp} is before 9:40 AM.")
+                return
+
+                    # long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
             # short_entry = df_entry.at[i, 'Short_Entry'] if 'Short_Entry' in df_entry.columns else False
             #
             # if i < len(df_exit):
@@ -704,10 +715,12 @@ class OrderManager:
         # Market open time (9:30 AM) and market close time (4:00 PM)
         market_open_time_naive = datetime(now.year, now.month, now.day, 9, 30)
         market_close_time_naive = datetime(now.year, now.month, now.day, 16, 0)
+        closing_time = datetime(now.year, now.month, now.day, 15, 55)
 
         # Localize the times to EST timezone
         market_open_time = est.localize(market_open_time_naive)
         market_close_time = est.localize(market_close_time_naive)
+        closing_time_est = est.localize(closing_time)
 
         ten_minutes_after_open = market_open_time + timedelta(minutes=10)
 
@@ -718,10 +731,10 @@ class OrderManager:
             print(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
             sleep(wait_seconds)
 
-        elif now >= market_close_time:
+        elif now >= closing_time_est:
             self.close_open_positions_and_cancel_orders()
-            logging.info("Market is closed. All positions closed and orders cancelled.")
-            print("Market is closed. All positions closed and orders cancelled.")
+            logging.info("It is 15:55. All positions closed and orders cancelled.")
+            print("It is 15:55. All positions closed and orders cancelled.")
 
             # Calculate the next market open time
             next_market_open_time = market_open_time_naive + timedelta(days=1)

@@ -385,7 +385,7 @@ class DataProcessor:
                 combined_data.set_index('Date', inplace=True)
                 combined_data.sort_values(by='Date', inplace=True)
                 logger.info(f"Combined Data for {ticker}:")
-                logger.info(combined_data.tail())
+                # logger.info(combined_data.tail())
                 # print('Combined Data')
                 # print(combined_data.tail())
 
