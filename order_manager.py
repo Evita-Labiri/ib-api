@@ -191,18 +191,24 @@ class OrderManager:
             i = len(df_entry) - 1
             timestamp = df_entry.iloc[i]['Date']
 
+            print(f"Original timestamp: {timestamp}, Timezone: {timestamp.tzinfo}")
+
             if pd.api.types.is_datetime64_any_dtype(timestamp):
-                timestamp = timestamp.tz_localize(None)
+                if timestamp.tzinfo is None:
+                    timestamp = pytz.timezone('America/New_York').localize(timestamp)
+                else:
+                    timestamp = timestamp.astimezone(pytz.timezone('America/New_York'))
+
+            print(f"Localized timestamp: {timestamp}, Timezone: {timestamp.tzinfo}")
 
             est = pytz.timezone('America/New_York')
             nine_forty_am = est.localize(datetime(timestamp.year, timestamp.month, timestamp.day, 9, 40))
+
             if timestamp < nine_forty_am:
                 logger.info(
                     f"Skipping signals for {contract_symbol} because the timestamp {timestamp} is before 9:40 AM.")
-                print(
-                    f"Skipping signals for {contract_symbol} because the timestamp {timestamp} is before 9:40 AM.")
+                print(f"Skipping signals for {contract_symbol} because the timestamp {timestamp} is before 9:40 AM.")
                 return
-
                     # long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
             # short_entry = df_entry.at[i, 'Short_Entry'] if 'Short_Entry' in df_entry.columns else False
             #
