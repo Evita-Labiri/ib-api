@@ -736,6 +736,7 @@ class OrderManager:
             logging.info(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
             print(f"Waiting for {wait_minutes:.2f} minutes until 10 minutes after market open...")
             sleep(wait_seconds)
+            return False
 
         elif now >= closing_time_est:
             self.close_open_positions_and_cancel_orders()
@@ -750,10 +751,12 @@ class OrderManager:
             logging.info(f"Waiting {wait_hours:.2f} hours until next market open...")
             print(f"Waiting {wait_hours:.2f} hours until next market open...")
             sleep(wait_seconds)
+            return False
 
         elif now >= market_open_time and now < market_close_time:
             logging.info("Market is open. Proceeding with orders.")
             print("Market is open. Proceeding with orders.")
+            return True
 
     def handle_order_execution(self, orderId, status):
         # with self.lock:
