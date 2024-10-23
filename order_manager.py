@@ -18,7 +18,7 @@ logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.Strea
 
 
 class OrderManager:
-    def __init__(self):
+    def __init__(self, api_helper):
         self.in_long_position = False
         self.in_short_position = False
         self.place_orders_outside_rth = False
@@ -26,6 +26,7 @@ class OrderManager:
         self.positions = {}
         self.active_positions = []
         self.lock = threading.Lock()
+        self.api_helper = api_helper
 
     def set_order_outside_rth(self):
         while True:
@@ -723,7 +724,7 @@ class OrderManager:
         # Market open time (9:30 AM) and market close time (4:00 PM)
         market_open_time_naive = datetime(now.year, now.month, now.day, 9, 30)
         market_close_time_naive = datetime(now.year, now.month, now.day, 16, 0)
-        closing_time = datetime(now.year, now.month, now.day, 15, 55)
+        closing_time = datetime(now.year, now.month, now.day, 16, 35)
 
         # Localize the times to EST timezone
         market_open_time = est.localize(market_open_time_naive)
@@ -820,32 +821,32 @@ class OrderManager:
     #     sys.exit(0)
 
     def close_open_positions_and_cancel_orders(self):
-        from ib_api import IBApi
-        from data_processing import DataProcessor
-        from database import Database
-
-        db = Database()
-        data_processor = DataProcessor(db, api_helper)
-        app = IBApi(data_processor, db)
+        # from ib_api import IBApi
+        # from data_processing import DataProcessor
+        # from database import Database
+        #
+        # db = Database()
+        # data_processor = DataProcessor(db, api_helper)
+        # app = IBApi(data_processor, db)
         logging.info("Closing all open positions and cancelling unfilled orders at market close.")
         print("Closing all open positions and cancelling unfilled orders at market close.")
 
-        open_positions = app.get_open_positions()
+        open_positions = self.api_helper.app.get_open_positions()
         for position in open_positions:
             contract = position.contract
             action = "SELL" if position.position > 0 else "BUY"
             quantity = abs(position.position)
 
-            close_order = app.create_order(app.nextValidOrderId, action, "MKT", quantity)
-            app.placeOrder(app.nextValidOrderId, contract, close_order)
-            app.nextValidOrderId += 1
+            close_order = self.api_helper.app.create_order(self.api_helper.app.nextValidOrderId, action, "MKT", quantity)
+            self.api_helper.app.placeOrder(self.api_helper.app.nextValidOrderId, contract, close_order)
+            self.api_helper.app.nextValidOrderId += 1
 
             logging.info(f"Closed position for {contract.symbol} with action {action} and quantity {quantity}.")
             print(f"Closed position for {contract.symbol} with action {action} and quantity {quantity}.")
 
-        open_orders = app.get_open_orders()
+        open_orders = self.api_helper.app.get_open_orders()
         for order in open_orders:
-            app.cancel_open_order(order.orderId)
+            self.api_helper.app.cancel_open_order(order.orderId)
             logging.info(f"Cancelled unfilled order ID {order.orderId} for {order.contract.symbol}.")
             print(f"Cancelled unfilled order ID {order.orderId} for {order.contract.symbol}.")
 

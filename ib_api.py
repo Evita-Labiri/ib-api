@@ -9,6 +9,7 @@ from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ibapi.order import Order
 import threading
+import api_helper
 # from globals import stop_flag
 from order_manager import OrderManager
 import logging
@@ -50,7 +51,7 @@ class IBApi(EClient, EWrapper):
         self.ohlcv_data = {}
         self.data_processor = data_processor
         self.db = db
-        self.order_manager = OrderManager()
+        self.order_manager = OrderManager(api_helper)
         self.profit_taker_order_id = None
         self.stop_loss_order_id = None
         self.entry_order_id = None
@@ -62,7 +63,6 @@ class IBApi(EClient, EWrapper):
         self.open_positions = []
         self.positions_fetched = False
         self.reqPositions()
-
 
     def set_ticker(self, ticker):
         self.ticker = ticker

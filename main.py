@@ -4,6 +4,7 @@ import threading
 import time
 # from datetime import datetime,  time as dt_time
 # import schedule
+import api_helper
 
 from globals import decision_queue
 from ib_api import IBApi
@@ -135,7 +136,7 @@ def run_order_script():
     app = IBApi(data_processor=None, db=db)
     data_processor = DataProcessor(db, app)
     app.data_processor = data_processor
-    order_manager = OrderManager()
+    order_manager = OrderManager(api_helper)
     data_processor.order_manager = order_manager
     logger.info("Connecting to TWS API...")
     app.connect("100.64.0.21", 7497, 1)

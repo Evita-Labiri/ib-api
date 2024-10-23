@@ -1,6 +1,5 @@
 import queue
 from datetime import datetime, timedelta
-
 import pandas as pd
 
 from order_manager import OrderManager
@@ -44,7 +43,7 @@ class DataProcessor:
         self.data_in_long_position = False
         self.data_in_short_position = False
         self.place_orders_outside_rth = False
-        self.order_manager = OrderManager()
+        self.order_manager = OrderManager(api_helper)
         self.export_buffer = {}
         # self.excel_lock = threading.Lock()
 
