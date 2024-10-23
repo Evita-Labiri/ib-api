@@ -197,7 +197,8 @@ class OrderManager:
                 if timestamp.tzinfo is None:
                     timestamp = pytz.timezone('America/New_York').localize(timestamp)
                 else:
-                    timestamp = timestamp.astimezone(pytz.timezone('America/New_York'))
+                    timestamp = timestamp.astimezone(
+                        pytz.timezone('America/New_York'))
 
             print(f"Localized timestamp: {timestamp}, Timezone: {timestamp.tzinfo}")
 
@@ -209,7 +210,8 @@ class OrderManager:
                     f"Skipping signals for {contract_symbol} because the timestamp {timestamp} is before 9:40 AM.")
                 print(f"Skipping signals for {contract_symbol} because the timestamp {timestamp} is before 9:40 AM.")
                 return
-                    # long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
+
+            # long_entry = df_entry.at[i, 'Long_Entry'] if 'Long_Entry' in df_entry.columns else False
             # short_entry = df_entry.at[i, 'Short_Entry'] if 'Short_Entry' in df_entry.columns else False
             #
             # if i < len(df_exit):
