@@ -193,12 +193,12 @@ class OrderManager:
 
             print(f"Original timestamp: {timestamp}, Timezone: {timestamp.tzinfo}")
 
-            if pd.api.types.is_datetime64_any_dtype(timestamp):
-                if timestamp.tzinfo is None:
-                    timestamp = pytz.timezone('America/New_York').localize(timestamp)
-                else:
-                    timestamp = timestamp.astimezone(
-                        pytz.timezone('America/New_York'))
+            if timestamp.tzinfo is None:
+                logger.info(f"Localizing timestamp {timestamp} to America/New_York.")
+                timestamp = pytz.timezone('America/New_York').localize(timestamp)
+            else:
+                logger.info(f"Converting timestamp {timestamp} to America/New_York timezone.")
+                timestamp = timestamp.astimezone(pytz.timezone('America/New_York'))
 
             print(f"Localized timestamp: {timestamp}, Timezone: {timestamp.tzinfo}")
 
