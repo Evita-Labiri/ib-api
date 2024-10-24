@@ -45,6 +45,8 @@ class DataProcessor:
         self.place_orders_outside_rth = False
         self.order_manager = OrderManager(api_helper)
         self.export_buffer = {}
+        # self.cached_df = None
+
         # self.excel_lock = threading.Lock()
 
     def process_queue_data(self):
@@ -309,6 +311,31 @@ class DataProcessor:
         return resampled_df
 
     def update_plot(self, contract, days=7,  interval_entry=None, interval_exit=None):
+        # if self.cached_df.empty:
+        #     end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        #     start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+        #
+        #     df_minute = self.fetch_data_from_db('minute_data', start_date, end_date, ticker=contract.symbol)
+        #     df_minute.set_index('Date', inplace=True)
+        #     self.cached_df = df_minute
+        #
+        #     # Ενημέρωση cache με νέα δεδομένα σε πραγματικό χρόνο
+        # real_time_data = self.process_queue_data()
+        # real_time_df = pd.DataFrame(real_time_data,
+        #                             columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Ticker'])
+        # real_time_df['Date'] = pd.to_datetime(real_time_df['Date'], errors='coerce')
+        # real_time_df.set_index('Date', inplace=True)
+        #
+        # real_time_df_filtered = real_time_df[real_time_df['Ticker'] == contract.symbol]
+        #
+        # # Προσθήκη των νέων δεδομένων στο cached DataFrame
+        # combined_data = pd.concat([self.cached_df, real_time_df_filtered])
+        #
+        # # Αφαιρούμε παλαιότερα δεδομένα (κρατάμε μόνο τα τελευταία 200+ κεριά για τους δείκτες)
+        # if len(combined_data) > 250:  # Μπορείς να το ρυθμίσεις ανάλογα με τους δείκτες που χρησιμοποιείς
+        #     combined_data = combined_data.iloc[-250:]
+        #
+        # self.cached_df = combined_data  # Ενημέρωση cache
         real_time_data = self.process_queue_data()
         # logger.debug(f"Real-time Data List: {self.real_time_data}")
         # print("Real-time Data List:")

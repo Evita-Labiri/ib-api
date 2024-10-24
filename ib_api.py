@@ -624,6 +624,12 @@ class IBApi(EClient, EWrapper):
         # print(f"Received contracts: {contracts}")
         while True:
             logger.debug("Running order main thread function")
+            now = datetime.now(pytz.timezone('America/New_York'))
+            closing_time = now.replace(hour=15, minute=55, second=0, microsecond=0)
+
+            if now >= closing_time:
+                logging.info("Market is closing soon. Closing open positions and cancelling unfilled orders.")
+                order_manager.close_open_positions_and_cancel_orders()
             # print("Running order main thread function")
             combined_data_dict = {}
             for contract_dict in contracts:

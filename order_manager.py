@@ -482,20 +482,20 @@ class OrderManager:
             sleep(wait_seconds)
             return False
 
-        elif now >= closing_time_est:
-            self.close_open_positions_and_cancel_orders()
-            logging.info("It is 15:55. All positions closed and orders cancelled.")
-            print("It is 15:55. All positions closed and orders cancelled.")
-
-            # Calculate the next market open time
-            next_market_open_time = market_open_time_naive + timedelta(days=1)
-            next_market_open_time = est.localize(next_market_open_time)
-            wait_seconds = (next_market_open_time - now).total_seconds()
-            wait_hours = wait_seconds / 3600
-            logging.info(f"Waiting {wait_hours:.2f} hours until next market open...")
-            print(f"Waiting {wait_hours:.2f} hours until next market open...")
-            sleep(wait_seconds)
-            return False
+        # elif now >= closing_time_est:
+        #     self.close_open_positions_and_cancel_orders()
+        #     logging.info("It is 15:55. All positions closed and orders cancelled.")
+        #     print("It is 15:55. All positions closed and orders cancelled.")
+        #
+        #     # Calculate the next market open time
+        #     next_market_open_time = market_open_time_naive + timedelta(days=1)
+        #     next_market_open_time = est.localize(next_market_open_time)
+        #     wait_seconds = (next_market_open_time - now).total_seconds()
+        #     wait_hours = wait_seconds / 3600
+        #     logging.info(f"Waiting {wait_hours:.2f} hours until next market open...")
+        #     print(f"Waiting {wait_hours:.2f} hours until next market open...")
+        #     sleep(wait_seconds)
+        #     return False
 
         elif now >= market_open_time and now < market_close_time:
             logging.info("Market is open. Proceeding with orders.")
