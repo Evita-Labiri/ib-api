@@ -464,7 +464,7 @@ class OrderManager:
 
         # Market open time (9:30 AM) and market close time (4:00 PM)
         market_open_time_naive = datetime(now.year, now.month, now.day, 9, 30)
-        market_close_time_naive = datetime(now.year, now.month, now.day, 16, 0)
+        market_close_time_naive = datetime(now.year, now.month, now.day, 16, 20)
         closing_time = datetime(now.year, now.month, now.day, 15, 55)
 
         # Localize the times to EST timezone
@@ -572,22 +572,22 @@ class OrderManager:
         logging.info("Closing all open positions and cancelling unfilled orders at market close.")
         print("Closing all open positions and cancelling unfilled orders at market close.")
 
-        open_positions = self.api_helper.app.get_open_positions()
+        open_positions = self.api_helper.get_open_positions()
         for position in open_positions:
             contract = position.contract
             action = "SELL" if position.position > 0 else "BUY"
             quantity = abs(position.position)
 
-            close_order = self.api_helper.app.create_order(self.api_helper.app.nextValidOrderId, action, "MKT", quantity)
-            self.api_helper.app.placeOrder(self.api_helper.app.nextValidOrderId, contract, close_order)
-            self.api_helper.app.nextValidOrderId += 1
+            close_order = self.api_helper.create_order(self.api_helper.app.nextValidOrderId, action, "MKT", quantity)
+            self.api_helper.placeOrder(self.api_helper.app.nextValidOrderId, contract, close_order)
+            self.api_helper.nextValidOrderId += 1
 
             logging.info(f"Closed position for {contract.symbol} with action {action} and quantity {quantity}.")
             print(f"Closed position for {contract.symbol} with action {action} and quantity {quantity}.")
 
-        open_orders = self.api_helper.app.get_open_orders()
+        open_orders = self.api_helper.get_open_orders()
         for order in open_orders:
-            self.api_helper.app.cancel_open_order(order.orderId)
+            self.api_helper.cancel_open_order(order.orderId)
             logging.info(f"Cancelled unfilled order ID {order.orderId} for {order.contract.symbol}.")
             print(f"Cancelled unfilled order ID {order.orderId} for {order.contract.symbol}.")
 
