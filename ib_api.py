@@ -516,6 +516,7 @@ class IBApi(EClient, EWrapper):
     def get_open_orders(self):
         self.open_orders = []
         self.reqOpenOrders()
+        ib_api_logger.info("Orders fetched")
         return self.open_orders
 
     def cancel_open_order(self, order_id):
@@ -547,6 +548,12 @@ class IBApi(EClient, EWrapper):
         except Exception as e:
             logger.error(f"Failed to cancel order {order_id}: {e}")
             print(f"Failed to cancel order {order_id}: {e}")
+
+    def request_positions(self):
+        """Κάνει αίτηση στο API για τις ανοιχτές θέσεις."""
+        self.positions_fetched = False
+        self.open_positions = []
+        self.reqPositions()
 
     def position(self, account, contract, position, avgCost):
         """Αυτή η μέθοδος καλείται ασύγχρονα όταν λαμβάνεις μια θέση."""
